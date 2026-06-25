@@ -5,8 +5,11 @@ An offline desktop crypto trading game built with Python and Tkinter.
 ## Features
 
 - Arcade-style trading dashboard
-- Market watch table with price, movement, holdings, value, and profit/loss
-- Compact visual wallet with combined positions and weighted average buy price
+- Clickable market coin tiles with price, daily move, holdings, live P/L, and signal badges
+- Right-side coin detail panel with a larger trend chart, trade controls, confidence, and signal explanation
+- Horizontal market news ticker with generated daily headlines
+- Structured market news events with target, price impact, sentiment impact, ticker text, and explanations
+- Compact position tiles with combined buys, weighted average buy price, held days, live P/L, and quick sell buttons
 - Trade ticket with quick buy/sell controls
 - Market mood, coin momentum, sentiment, and event-driven price movement
 - Weak rumour signals that raise sector/coin volatility for a few days
@@ -20,9 +23,9 @@ An offline desktop crypto trading game built with Python and Tkinter.
 ## How To Play
 
 1. Pick a difficulty and run length.
-2. Select a coin from Market Watch.
+2. Select a coin tile from Market Watch.
 3. Enter an amount or use Buy Max/Sell All.
-4. Watch market mood, momentum, sentiment, rumours, news, and your wallet P/L.
+4. Watch signal badges, confidence, market mood, rumours, news, and your wallet P/L.
 5. Survive the run and chase the highest return percentage.
 
 ## Scoring
@@ -41,11 +44,11 @@ Saved scores include:
 
 ## Controls
 
-- Select a coin from the market table
+- Select a coin from the market tiles
 - Enter a trade amount
 - Buy, Sell, Buy Max, or Sell All
 - Advance to the next day
-- Review wallet positions and trade history
+- Review position tiles and trade history
 - Use the sidebar buttons for Market, Wallet, Trade History, Achievements, High Scores, and How To Play
 
 ## Run From Source
@@ -61,7 +64,7 @@ python crypto_game.py
 Install PyInstaller, then run:
 
 ```powershell
-pyinstaller --onefile --windowed --name crypto_game_v1.2 crypto_game.py
+pyinstaller --onefile --windowed --name crypto_game_v1.3 crypto_game.py
 ```
 
 Packaged builds should be uploaded through GitHub Releases rather than committed

@@ -29,6 +29,7 @@ class CryptoTraderApp:
             "accent_dark": "#1d4ed8",
             "neon": "#22c55e",
             "gold": "#f59e0b",
+            "amber": "#d97706",
             "green": "#16a34a",
             "red": "#dc2626",
             "purple": "#7c3aed",
@@ -38,7 +39,7 @@ class CryptoTraderApp:
         self.day = 1
         self.cash = 1000.0
         self.starting_cash = 1000.0
-        self.wallet_capacity = 500.0
+        self.risk_limit = 500.0
         self.game_over = False
         self.total_trades = 0
         self.best_trade = 0.0
@@ -50,11 +51,14 @@ class CryptoTraderApp:
         self.high_score_file = self.get_data_path("high_scores.json")
         self.selected_coin_name = "Bitcoin"
         self.event_feed = deque(maxlen=8)
+        self.news_items = deque(maxlen=10)
         self.sort_reverse = True
         self.wallet_lots = []
         self.next_lot_id = 1
         self.trade_history = deque(maxlen=80)
         self.active_rumours = []
+        self.market_tile_widgets = {}
+        self.position_tile_widgets = []
 
         self.coins = [
             self.make_coin("Bitcoin", 20000.0, 0.07, "Majors"),
@@ -167,9 +171,9 @@ class CryptoTraderApp:
         self.difficulty_var = tk.StringVar(value="Easy")
         ttk.Label(setup, text="Difficulty", style="CardLabel.TLabel").pack(anchor="w", pady=(18, 0))
         difficulties = [
-            ("Easy", "Easy - GBP 20,000 cash, GBP 30,000 risk limit"),
-            ("Medium", "Medium - GBP 10,000 cash, GBP 15,000 risk limit"),
-            ("Hard", "Hard - GBP 1,000 cash, GBP 2,500 risk limit"),
+            ("Easy", "Easy - GBP 20,000 cash, GBP 30,000 Risk Limit"),
+            ("Medium", "Medium - GBP 10,000 cash, GBP 15,000 Risk Limit"),
+            ("Hard", "Hard - GBP 1,000 cash, GBP 2,500 Risk Limit"),
         ]
         for val, text in difficulties:
             ttk.Radiobutton(setup, text=text, variable=self.difficulty_var, value=val).pack(anchor="w", pady=3)
@@ -203,6 +207,7 @@ class CryptoTraderApp:
         self.day = 1
         self.game_over = False
         self.event_feed.clear()
+        self.news_items.clear()
         self.wallet_lots.clear()
         self.trade_history.clear()
         self.active_rumours.clear()
@@ -215,15 +220,15 @@ class CryptoTraderApp:
         if difficulty == "Easy":
             self.cash = 20000.0
             self.starting_cash = 20000.0
-            self.wallet_capacity = 30000.0
+            self.risk_limit = 30000.0
         elif difficulty == "Medium":
             self.cash = 10000.0
             self.starting_cash = 10000.0
-            self.wallet_capacity = 15000.0
+            self.risk_limit = 15000.0
         else:
             self.cash = 1000.0
             self.starting_cash = 1000.0
-            self.wallet_capacity = 2500.0
+            self.risk_limit = 2500.0
 
         for coin in self.coins:
             coin["price"] = coin["initial_price"]
@@ -236,7 +241,14 @@ class CryptoTraderApp:
             coin["sentiment"] = 0.0
 
         self.selected_coin_name = "Bitcoin"
-        self.add_event("Market opens. Choose your first move.")
+        self.add_news({
+            "headline": "Opening bell: market is watching momentum, rumours, and sector risk.",
+            "target": "Market",
+            "price_impact": 0.0,
+            "sentiment_impact": 0.0,
+            "ticker": "Opening bell: choose a thesis before the first move.",
+            "explanation": "Use the signal badges, momentum, and news ticker to decide where risk looks worthwhile.",
+        })
         self.show_game_frame()
 
     # ======================
@@ -277,8 +289,8 @@ class CryptoTraderApp:
         content.grid(row=0, column=1, sticky="nsew")
         content.columnconfigure(0, weight=1, minsize=650)
         content.columnconfigure(1, weight=0, minsize=330)
-        content.rowconfigure(2, weight=1)
-        content.rowconfigure(3, weight=0)
+        content.rowconfigure(3, weight=1)
+        content.rowconfigure(4, weight=0)
 
         top = ttk.Frame(content, style="Panel.TFrame", padding=18)
         top.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 14))
@@ -300,20 +312,27 @@ class CryptoTraderApp:
         self.next_day_button = ttk.Button(top, text="Next day", style="Accent.TButton", command=self.next_day)
         self.next_day_button.grid(row=2, column=2, sticky="ew", padx=(10, 0))
 
+        ticker_frame = ttk.Frame(content, style="Panel.TFrame", padding=(12, 8))
+        ticker_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        ticker_frame.columnconfigure(1, weight=1)
+        ttk.Label(ticker_frame, text="NEWS", style="CardLabel.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 10))
+        self.news_ticker_label = ttk.Label(ticker_frame, text="Market news will appear here.", style="Body.TLabel")
+        self.news_ticker_label.grid(row=0, column=1, sticky="ew")
+
         self.summary_frame = ttk.Frame(content, style="Panel.TFrame", padding=12)
-        self.summary_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 14))
+        self.summary_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 14))
         for col in range(6):
             self.summary_frame.columnconfigure(col, weight=1)
         self.summary_labels = {}
         self.build_summary_card(0, "Cash", "cash")
         self.build_summary_card(1, "Holdings", "holdings")
-        self.build_summary_card(2, "Capacity", "capacity")
+        self.build_summary_card(2, "Risk Limit", "risk_limit")
         self.build_summary_card(3, "Wallet", "lots")
         self.build_summary_card(4, "Mood", "mood")
         self.build_summary_card(5, "Rank", "rank")
 
         market_panel = ttk.Frame(content, style="Panel.TFrame", padding=14)
-        market_panel.grid(row=2, column=0, sticky="nsew", padx=(0, 14), pady=(0, 12))
+        market_panel.grid(row=3, column=0, sticky="nsew", padx=(0, 14), pady=(0, 12))
 
         market_panel.rowconfigure(1, weight=1)
         market_panel.columnconfigure(0, weight=1)
@@ -322,56 +341,27 @@ class CryptoTraderApp:
         market_header.columnconfigure(0, weight=1)
         ttk.Label(market_header, text="Market watch", style="PanelTitle.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Button(market_header, text="Sort price", style="Soft.TButton", command=self.sort_by_price).grid(row=0, column=1, padx=(8, 0))
-        columns = ("price", "change", "owned", "value", "pl")
-        self.market_tree = ttk.Treeview(market_panel, columns=columns, show="tree headings", selectmode="browse")
-        self.market_tree.heading("#0", text="Coin")
-        self.market_tree.column("#0", width=180, anchor="w", stretch=True)
-        for key, text, width in (
-            ("price", "Price", 135),
-            ("change", "24H %", 90),
-            ("owned", "Owned", 105),
-            ("value", "Value", 130),
-            ("pl", "Profit / Loss", 125),
-        ):
-            self.market_tree.heading(key, text=text)
-            self.market_tree.column(key, width=width, anchor="e")
-        self.market_tree.grid(row=1, column=0, sticky="nsew")
-        self.market_tree.bind("<<TreeviewSelect>>", self.on_coin_selected)
-        self.market_tree.tag_configure("up", foreground=self.colors["green"], background="#fbfdfc")
-        self.market_tree.tag_configure("down", foreground=self.colors["red"], background="#fffafa")
-        self.market_tree.tag_configure("flat", foreground=self.colors["ink"], background=self.colors["panel"])
+        self.market_tiles_frame = ttk.Frame(market_panel, style="Panel.TFrame")
+        self.market_tiles_frame.grid(row=1, column=0, sticky="nsew")
+        for col in range(2):
+            self.market_tiles_frame.columnconfigure(col, weight=1)
 
         wallet_panel = ttk.Frame(content, style="Panel.TFrame", padding=12)
-        wallet_panel.grid(row=3, column=0, columnspan=2, sticky="ew")
+        wallet_panel.grid(row=4, column=0, columnspan=2, sticky="ew")
         wallet_panel.columnconfigure(0, weight=1)
         wallet_header = ttk.Frame(wallet_panel, style="Panel.TFrame")
         wallet_header.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         wallet_header.columnconfigure(0, weight=1)
-        ttk.Label(wallet_header, text="Visual wallet", style="PanelTitle.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(wallet_header, text="Positions", style="PanelTitle.TLabel").grid(row=0, column=0, sticky="w")
         self.wallet_hint = ttk.Label(wallet_header, text="Buys are combined by coin using weighted average buy price.", style="Muted.TLabel")
         self.wallet_hint.grid(row=0, column=1, sticky="e")
-        wallet_columns = ("days", "amount", "avg_buy", "current", "value", "pl")
-        self.wallet_tree = ttk.Treeview(wallet_panel, columns=wallet_columns, show="tree headings", selectmode="browse")
-        self.wallet_tree.heading("#0", text="Coin")
-        self.wallet_tree.column("#0", width=140, anchor="w")
-        for key, text, width in (
-            ("days", "Buy days", 130),
-            ("amount", "Total owned", 120),
-            ("avg_buy", "Avg buy", 120),
-            ("current", "Current", 120),
-            ("value", "Now worth", 130),
-            ("pl", "Live P/L", 130),
-        ):
-            self.wallet_tree.heading(key, text=text)
-            self.wallet_tree.column(key, width=width, anchor="e")
-        self.wallet_tree.grid(row=1, column=0, sticky="ew")
-        self.wallet_tree.configure(height=4)
-        self.wallet_tree.tag_configure("up", foreground=self.colors["green"], background="#fbfdfc")
-        self.wallet_tree.tag_configure("down", foreground=self.colors["red"], background="#fffafa")
-        self.wallet_tree.tag_configure("flat", foreground=self.colors["ink"], background=self.colors["panel"])
+        self.position_tiles_frame = ttk.Frame(wallet_panel, style="Panel.TFrame")
+        self.position_tiles_frame.grid(row=1, column=0, sticky="ew")
+        for col in range(4):
+            self.position_tiles_frame.columnconfigure(col, weight=1)
 
         side = ttk.Frame(content, style="App.TFrame")
-        side.grid(row=2, column=1, rowspan=1, sticky="nsew")
+        side.grid(row=3, column=1, rowspan=1, sticky="nsew")
         side.rowconfigure(1, weight=1)
         self.trade_panel = ttk.Frame(side, style="Panel.TFrame", padding=16)
         self.trade_panel.grid(row=0, column=0, sticky="ew", pady=(0, 14))
@@ -389,20 +379,26 @@ class CryptoTraderApp:
         self.selected_meta.pack(anchor="w", pady=(2, 0))
         self.selected_mood = ttk.Label(text_stack, text="", style="Muted.TLabel")
         self.selected_mood.pack(anchor="w", pady=(2, 0))
+        self.signal_helper = ttk.Label(self.trade_panel, text="", style="PanelTitle.TLabel")
+        self.signal_helper.grid(row=2, column=0, columnspan=4, sticky="w", pady=(0, 2))
+        self.signal_confidence = ttk.Label(self.trade_panel, text="", style="Muted.TLabel")
+        self.signal_confidence.grid(row=3, column=0, columnspan=4, sticky="w")
+        self.signal_explanation = ttk.Label(self.trade_panel, text="", style="Muted.TLabel", wraplength=290)
+        self.signal_explanation.grid(row=4, column=0, columnspan=4, sticky="w", pady=(0, 10))
         ttk.Label(
             self.trade_panel,
             text="Costs: 0.5% fee plus 0.25% spread on each trade",
             style="Muted.TLabel",
-        ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(0, 10))
-        ttk.Label(self.trade_panel, text="Amount", style="CardLabel.TLabel").grid(row=3, column=0, sticky="w", pady=(0, 4))
+        ).grid(row=5, column=0, columnspan=4, sticky="w", pady=(0, 10))
+        ttk.Label(self.trade_panel, text="Amount", style="CardLabel.TLabel").grid(row=6, column=0, sticky="w", pady=(0, 4))
         self.trade_amount = tk.StringVar(value="1")
-        ttk.Entry(self.trade_panel, textvariable=self.trade_amount, width=12).grid(row=4, column=0, columnspan=4, sticky="ew", pady=(0, 10))
+        ttk.Entry(self.trade_panel, textvariable=self.trade_amount, width=12).grid(row=7, column=0, columnspan=4, sticky="ew", pady=(0, 10))
         for col, amount in enumerate((1, 10, 100, 1000)):
-            ttk.Button(self.trade_panel, text=str(amount), style="Soft.TButton", command=lambda value=amount: self.set_trade_amount(value)).grid(row=5, column=col, sticky="ew", padx=(0 if col == 0 else 5, 0))
-        ttk.Button(self.trade_panel, text="BUY", style="Buy.TButton", command=self.buy_selected).grid(row=6, column=0, columnspan=2, sticky="ew", pady=(12, 0), padx=(0, 5))
-        ttk.Button(self.trade_panel, text="SELL", style="Soft.TButton", command=self.sell_selected).grid(row=6, column=2, columnspan=2, sticky="ew", pady=(12, 0))
-        ttk.Button(self.trade_panel, text="Buy max", style="Soft.TButton", command=self.buy_selected_max).grid(row=7, column=0, columnspan=2, sticky="ew", pady=(8, 0), padx=(0, 5))
-        ttk.Button(self.trade_panel, text="Sell all", style="Soft.TButton", command=self.sell_selected_max).grid(row=7, column=2, columnspan=2, sticky="ew", pady=(8, 0))
+            ttk.Button(self.trade_panel, text=str(amount), style="Soft.TButton", command=lambda value=amount: self.set_trade_amount(value)).grid(row=8, column=col, sticky="ew", padx=(0 if col == 0 else 5, 0))
+        ttk.Button(self.trade_panel, text="BUY", style="Buy.TButton", command=self.buy_selected).grid(row=9, column=0, columnspan=2, sticky="ew", pady=(12, 0), padx=(0, 5))
+        ttk.Button(self.trade_panel, text="SELL", style="Soft.TButton", command=self.sell_selected).grid(row=9, column=2, columnspan=2, sticky="ew", pady=(12, 0))
+        ttk.Button(self.trade_panel, text="Buy max", style="Soft.TButton", command=self.buy_selected_max).grid(row=10, column=0, columnspan=2, sticky="ew", pady=(8, 0), padx=(0, 5))
+        ttk.Button(self.trade_panel, text="Sell all", style="Soft.TButton", command=self.sell_selected_max).grid(row=10, column=2, columnspan=2, sticky="ew", pady=(8, 0))
 
         chart_panel = ttk.Frame(side, style="Panel.TFrame", padding=16)
         chart_panel.grid(row=1, column=0, sticky="nsew", pady=(0, 14))
@@ -412,16 +408,10 @@ class CryptoTraderApp:
         self.chart_canvas = tk.Canvas(chart_panel, height=145, bg=self.colors["panel"], bd=0, highlightthickness=0)
         self.chart_canvas.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
 
-        feed_panel = ttk.Frame(side, style="Panel.TFrame", padding=16)
-        feed_panel.grid(row=2, column=0, sticky="ew")
-        ttk.Label(feed_panel, text="Market events", style="PanelTitle.TLabel").pack(anchor="w")
-        self.feed_list = tk.Listbox(feed_panel, height=7, relief="flat", bd=0, highlightthickness=0, bg=self.colors["panel"], fg=self.colors["ink"], font=("Segoe UI", 9))
-        self.feed_list.pack(fill="x", pady=(10, 0))
-
         history_panel = ttk.Frame(side, style="Panel.TFrame", padding=16)
-        history_panel.grid(row=3, column=0, sticky="ew", pady=(14, 0))
+        history_panel.grid(row=2, column=0, sticky="ew")
         ttk.Label(history_panel, text="Trade history", style="PanelTitle.TLabel").pack(anchor="w")
-        self.history_list = tk.Listbox(history_panel, height=5, relief="flat", bd=0, highlightthickness=0, bg=self.colors["panel"], fg=self.colors["ink"], font=("Segoe UI", 8))
+        self.history_list = tk.Listbox(history_panel, height=8, relief="flat", bd=0, highlightthickness=0, bg=self.colors["panel"], fg=self.colors["ink"], font=("Segoe UI", 8))
         self.history_list.pack(fill="x", pady=(10, 0))
 
     def build_summary_card(self, column, label, key):
@@ -439,8 +429,9 @@ class CryptoTraderApp:
 
     def update_dashboard(self):
         self.update_summary()
-        self.update_market_rows()
-        self.update_wallet_rows()
+        self.update_news_ticker()
+        self.update_market_tiles()
+        self.update_position_tiles()
         self.update_trade_panel()
         self.update_chart()
         self.update_feed()
@@ -450,14 +441,14 @@ class CryptoTraderApp:
         holdings = self.get_holdings_value()
         net_worth = self.cash + holdings
         total_held = self.get_total_held()
-        capacity_text = f"GBP {holdings:,.0f}/{self.wallet_capacity:,.0f}"
+        risk_text = f"GBP {holdings:,.0f}/{self.risk_limit:,.0f}"
         rank = self.get_rank_name(net_worth)
         self.hero_net_worth.config(text=f"GBP {net_worth:,.2f}")
         self.hero_today.config(text=f"Today: {self.get_daily_net_change_text()}")
         self.day_label.config(text=f"Day {min(self.day, self.max_days)} of {self.max_days}")
         self.summary_labels["cash"].config(text=f"GBP {self.cash:,.2f}")
         self.summary_labels["holdings"].config(text=f"GBP {holdings:,.2f}")
-        self.summary_labels["capacity"].config(text=capacity_text)
+        self.summary_labels["risk_limit"].config(text=risk_text)
         wallet_positions = self.get_wallet_positions()
         self.summary_labels["lots"].config(text=f"{len(wallet_positions)} coins")
         self.summary_labels["mood"].config(text=self.get_market_mood())
@@ -468,71 +459,114 @@ class CryptoTraderApp:
         self.day_progress["value"] = min(100, (self.day / self.max_days) * 100)
         self.next_day_button.config(text=f"Next day ({self.day}/{self.max_days})")
 
-    def update_market_rows(self):
-        selected = self.selected_coin_name
-        for item in self.market_tree.get_children():
-            self.market_tree.delete(item)
-
-        for coin in self.coins:
-            change = self.get_change_percent(coin)
-            tag = "up" if change > 0 else "down" if change < 0 else "flat"
-            value = coin["inventory"] * coin["price"]
-            pl = (coin["price"] - coin["average_cost"]) * coin["inventory"] if coin["inventory"] else 0
-            self.market_tree.insert(
-                "",
-                "end",
-                iid=coin["name"],
-                text=coin["name"],
-                values=(
-                    f"GBP {coin['price']:,.5f}",
-                    f"{change:+.2f}%",
-                    self.format_amount(coin["inventory"]),
-                    f"GBP {value:,.2f}",
-                    f"GBP {pl:,.2f}",
-                ),
-                tags=(tag,),
-            )
-        if selected in self.market_tree.get_children():
-            self.market_tree.selection_set(selected)
-            self.market_tree.focus(selected)
-
-    def update_wallet_rows(self):
-        if not hasattr(self, "wallet_tree"):
+    def update_news_ticker(self):
+        if not hasattr(self, "news_ticker_label"):
             return
-        for item in self.wallet_tree.get_children():
-            self.wallet_tree.delete(item)
+        if not self.news_items:
+            self.news_ticker_label.config(text="No news yet. Advance a day for market headlines.")
+            return
+        headlines = [item["ticker"] for item in list(self.news_items)[-4:]]
+        self.news_ticker_label.config(text="  |  ".join(headlines))
+
+    def make_news_event(self, headline, target, price_impact, sentiment_impact, ticker, explanation, apply):
+        return {
+            "headline": headline,
+            "target": target,
+            "price_impact": price_impact,
+            "sentiment_impact": sentiment_impact,
+            "ticker": ticker,
+            "explanation": explanation,
+            "apply": apply,
+        }
+
+    def add_news(self, news):
+        self.news_items.append(news)
+        self.add_event(news["ticker"])
+        self.update_news_ticker()
+
+    def update_market_tiles(self):
+        if not hasattr(self, "market_tiles_frame"):
+            return
+        for child in self.market_tiles_frame.winfo_children():
+            child.destroy()
+        self.market_tile_widgets = {}
+
+        for index, coin in enumerate(self.coins):
+            tile = self.create_coin_tile(self.market_tiles_frame, coin)
+            tile.grid(row=index // 2, column=index % 2, sticky="nsew", padx=6, pady=6)
+            self.market_tile_widgets[coin["name"]] = tile
+
+    def create_coin_tile(self, parent, coin):
+        signal = self.get_coin_signal_rating(coin)
+        change = self.get_change_percent(coin)
+        pl = (coin["price"] - coin["average_cost"]) * coin["inventory"] if coin["inventory"] else 0.0
+        border_color = self.get_signal_color(signal["label"])
+        tile = tk.Frame(parent, bg=self.colors["panel"], highlightbackground=border_color, highlightthickness=2, bd=0)
+        tile.columnconfigure(0, weight=1)
+        tile.columnconfigure(1, weight=0)
+
+        tk.Label(tile, text=coin["name"], bg=self.colors["panel"], fg=self.colors["ink"], font=("Segoe UI", 11, "bold")).grid(row=0, column=0, sticky="w", padx=10, pady=(8, 0))
+        badge = tk.Label(tile, text=signal["label"], bg=border_color, fg="#ffffff", font=("Segoe UI", 8, "bold"), padx=8, pady=2)
+        badge.grid(row=0, column=1, sticky="e", padx=10, pady=(8, 0))
+        move_color = self.colors["green"] if change >= 0 else self.colors["red"]
+        tk.Label(tile, text=f"GBP {coin['price']:,.5f}", bg=self.colors["panel"], fg=self.colors["ink"], font=("Segoe UI", 10)).grid(row=1, column=0, sticky="w", padx=10, pady=(4, 0))
+        tk.Label(tile, text=f"{change:+.2f}%", bg=self.colors["panel"], fg=move_color, font=("Segoe UI", 10, "bold")).grid(row=1, column=1, sticky="e", padx=10, pady=(4, 0))
+        tk.Label(tile, text=f"Owned {self.format_amount(coin['inventory'])}", bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9)).grid(row=2, column=0, sticky="w", padx=10, pady=(6, 8))
+        pl_color = self.colors["green"] if pl >= 0 else self.colors["red"]
+        tk.Label(tile, text=f"P/L GBP {pl:,.2f}", bg=self.colors["panel"], fg=pl_color, font=("Segoe UI", 9, "bold")).grid(row=2, column=1, sticky="e", padx=10, pady=(6, 8))
+
+        for child in tile.winfo_children():
+            child.bind("<Button-1>", lambda _event, name=coin["name"]: self.select_coin(name))
+        tile.bind("<Button-1>", lambda _event, name=coin["name"]: self.select_coin(name))
+        return tile
+
+    def update_position_tiles(self):
+        if not hasattr(self, "position_tiles_frame"):
+            return
+        for child in self.position_tiles_frame.winfo_children():
+            child.destroy()
+        self.position_tile_widgets = []
 
         positions = self.get_wallet_positions()
         if not positions:
             self.wallet_hint.config(text="No holdings yet. Buy a coin to populate the wallet.")
+            tk.Label(
+                self.position_tiles_frame,
+                text="No open positions. Select a coin tile and place a trade.",
+                bg=self.colors["panel"],
+                fg=self.colors["muted"],
+                font=("Segoe UI", 10),
+            ).grid(row=0, column=0, sticky="w", padx=6, pady=8)
             return
         self.wallet_hint.config(text="Buys are combined by coin using weighted average buy price.")
 
-        for position in positions:
+        for index, position in enumerate(positions):
             coin = self.get_coin_by_name(position["coin"])
-            current_price = coin["price"]
-            value = position["amount"] * current_price
-            pl = (current_price - position["avg_buy_price"]) * position["amount"]
-            tag = "up" if pl > 0 else "down" if pl < 0 else "flat"
-            self.wallet_tree.insert(
-                "",
-                "end",
-                iid=position["coin"],
-                text=position["coin"],
-                values=(
-                    position["day_label"],
-                    f"{position['amount']:,.4f}",
-                    f"GBP {position['avg_buy_price']:,.5f}",
-                    f"GBP {current_price:,.5f}",
-                    f"GBP {value:,.2f}",
-                    f"GBP {pl:,.2f}",
-                ),
-                tags=(tag,),
-            )
+            tile = self.create_position_tile(self.position_tiles_frame, position, coin)
+            tile.grid(row=index // 4, column=index % 4, sticky="nsew", padx=6, pady=4)
+            self.position_tile_widgets.append(tile)
+
+    def create_position_tile(self, parent, position, coin):
+        current_price = coin["price"]
+        value = position["amount"] * current_price
+        pl = (current_price - position["avg_buy_price"]) * position["amount"]
+        pl_color = self.colors["green"] if pl >= 0 else self.colors["red"]
+        tile = tk.Frame(parent, bg=self.colors["panel_alt"], highlightbackground=self.colors["line"], highlightthickness=1, bd=0)
+        tile.columnconfigure(0, weight=1)
+        tk.Label(tile, text=position["coin"], bg=self.colors["panel_alt"], fg=self.colors["ink"], font=("Segoe UI", 10, "bold")).grid(row=0, column=0, sticky="w", padx=10, pady=(8, 0))
+        tk.Label(tile, text=f"Amount {self.format_amount(position['amount'])}", bg=self.colors["panel_alt"], fg=self.colors["muted"], font=("Segoe UI", 8)).grid(row=1, column=0, sticky="w", padx=10)
+        tk.Label(tile, text=f"Avg GBP {position['avg_buy_price']:,.5f}", bg=self.colors["panel_alt"], fg=self.colors["muted"], font=("Segoe UI", 8)).grid(row=2, column=0, sticky="w", padx=10)
+        tk.Label(tile, text=f"Now GBP {current_price:,.5f}", bg=self.colors["panel_alt"], fg=self.colors["muted"], font=("Segoe UI", 8)).grid(row=3, column=0, sticky="w", padx=10)
+        tk.Label(tile, text=f"P/L GBP {pl:,.2f}", bg=self.colors["panel_alt"], fg=pl_color, font=("Segoe UI", 9, "bold")).grid(row=4, column=0, sticky="w", padx=10, pady=(2, 0))
+        tk.Label(tile, text=f"Held {position['held_days']}", bg=self.colors["panel_alt"], fg=self.colors["muted"], font=("Segoe UI", 8)).grid(row=5, column=0, sticky="w", padx=10)
+        tk.Button(tile, text="Sell 25%", command=lambda name=coin["name"], amount=position["amount"] * 0.25: self.sell_coin(self.get_coin_index(name), amount), bg="#ffffff", fg=self.colors["ink"], relief="flat").grid(row=6, column=0, sticky="ew", padx=8, pady=(6, 2))
+        tk.Button(tile, text="Sell all", command=lambda name=coin["name"]: self.sell_max(self.get_coin_index(name)), bg="#ffffff", fg=self.colors["ink"], relief="flat").grid(row=7, column=0, sticky="ew", padx=8, pady=(0, 8))
+        return tile
 
     def update_trade_panel(self):
         coin = self.get_selected_coin()
         change = self.get_change_percent(coin)
+        signal = self.get_coin_signal_rating(coin)
         self.selected_title.config(text=coin["name"])
         self.selected_meta.config(
             text=f"Price GBP {coin['price']:,.5f} | Move {change:+.2f}% | Owned {self.format_amount(coin['inventory'])}"
@@ -540,6 +574,9 @@ class CryptoTraderApp:
         self.selected_mood.config(
             text=f"{coin['sector']} | Momentum {coin['momentum'] * 100:+.2f}% | Sentiment {coin['sentiment'] * 100:+.2f}%"
         )
+        self.signal_helper.config(text=f"{signal['label']} - {signal['helper']}")
+        self.signal_confidence.config(text=f"Confidence: {signal['confidence']}%")
+        self.signal_explanation.config(text=signal["explanation"])
         self.draw_coin_badge(coin)
 
     def draw_coin_badge(self, coin):
@@ -563,6 +600,54 @@ class CryptoTraderApp:
             "Chainlink": "#0ea5e9",
         }
         return colors.get(name, self.colors["accent"])
+
+    def get_signal_color(self, label):
+        colors = {
+            "Good Buy": self.colors["green"],
+            "Wait": self.colors["amber"],
+            "Risky": "#f97316",
+            "Bad Buy": self.colors["red"],
+        }
+        return colors.get(label, self.colors["muted"])
+
+    def get_coin_signal_rating(self, coin):
+        change = self.get_change_percent(coin)
+        rumour_volatility, rumour_sentiment = self.get_coin_signal(coin)
+        momentum_score = coin["momentum"] * 220
+        sentiment_score = (coin["sentiment"] + rumour_sentiment) * 260
+        move_score = max(-18, min(18, change * 1.8))
+        volatility_penalty = (coin["volatility"] + rumour_volatility) * 90
+        trend_heat_penalty = max(0, (coin["price"] / coin["initial_price"] - 1.45) * 28)
+        crash_value_bonus = max(0, (0.82 - coin["price"] / coin["initial_price"]) * 18)
+        score = 50 + momentum_score + sentiment_score + move_score + crash_value_bonus - volatility_penalty - trend_heat_penalty
+        score = max(0, min(100, int(round(score))))
+
+        if score >= 68:
+            label = "Good Buy"
+            helper = "momentum and mood are lining up"
+            explanation = "Positive pressure is stronger than the risk penalty, so this coin has a cleaner setup today."
+        elif score >= 46:
+            label = "Wait"
+            helper = "setup is mixed"
+            explanation = "The signal is balanced. Watch the next headline or price move before adding more exposure."
+        elif score >= 28:
+            label = "Risky"
+            helper = "volatility is elevated"
+            explanation = "There may be upside, but volatility, heat, or weak sentiment makes the trade harder to time."
+        else:
+            label = "Bad Buy"
+            helper = "pressure is negative"
+            explanation = "Momentum and sentiment are working against this coin, so buying now has a poor risk profile."
+
+        if rumour_volatility or rumour_sentiment:
+            explanation += " Active rumours are also adding uncertainty."
+
+        return {
+            "label": label,
+            "helper": helper,
+            "confidence": score,
+            "explanation": explanation,
+        }
 
     def update_chart(self):
         coin = self.get_selected_coin()
@@ -600,9 +685,7 @@ class CryptoTraderApp:
         canvas.create_text(width - pad, pad, text=f"High GBP {max_v:,.4f}", fill=self.colors["muted"], anchor="ne", font=("Segoe UI", 8))
 
     def update_feed(self):
-        self.feed_list.delete(0, "end")
-        for event in reversed(self.event_feed):
-            self.feed_list.insert("end", event)
+        return
 
     def update_trade_history(self):
         if not hasattr(self, "history_list"):
@@ -622,24 +705,24 @@ class CryptoTraderApp:
 
     def add_event(self, text):
         self.event_feed.append(f"Day {min(self.day, self.max_days)}: {text}")
-        if hasattr(self, "feed_list"):
-            self.update_feed()
+
+    def select_coin(self, name):
+        self.selected_coin_name = name
+        self.update_market_tiles()
+        self.update_trade_panel()
+        self.update_chart()
 
     def on_coin_selected(self, _event=None):
-        selected = self.market_tree.selection()
-        if selected:
-            self.selected_coin_name = selected[0]
-            self.update_trade_panel()
-            self.update_chart()
+        return
 
     def focus_dashboard(self):
         self.hero_net_worth.focus_set()
 
     def focus_market(self):
-        self.market_tree.focus_set()
+        self.market_tiles_frame.focus_set()
 
     def focus_wallet(self):
-        self.wallet_tree.focus_set()
+        self.position_tiles_frame.focus_set()
 
     def focus_trade_history(self):
         self.history_list.focus_set()
@@ -717,8 +800,8 @@ class CryptoTraderApp:
         if total_cost > self.cash:
             self.show_notice("Not enough cash for that buy.")
             return
-        if new_value > self.wallet_capacity:
-            self.show_notice("That buy exceeds your portfolio risk limit.")
+        if new_value > self.risk_limit:
+            self.show_notice("That buy exceeds your Risk Limit.")
             return
 
         self.cash -= total_cost
@@ -767,11 +850,11 @@ class CryptoTraderApp:
         if self.game_over:
             return
         coin = self.coins[index]
-        value_capacity_left = max(0.0, self.wallet_capacity - self.get_holdings_value())
+        risk_limit_left = max(0.0, self.risk_limit - self.get_holdings_value())
         execution_price = coin["price"] * (1 + self.spread_rate)
         cash_limited_amount = self.cash / (execution_price * (1 + self.transaction_fee_rate))
-        capacity_limited_amount = value_capacity_left / execution_price
-        amount_to_buy = min(cash_limited_amount, capacity_limited_amount)
+        risk_limited_amount = risk_limit_left / execution_price
+        amount_to_buy = min(cash_limited_amount, risk_limited_amount)
         amount_to_buy = math.floor(amount_to_buy * 100000000) / 100000000
         if amount_to_buy <= 0:
             self.show_notice("Cannot buy any more of this coin.")
@@ -818,7 +901,14 @@ class CryptoTraderApp:
         self.age_rumours()
 
         biggest = max(movers, key=lambda item: item[0])
-        self.add_event(f"{biggest[1]} moved {biggest[2] * 100:+.2f}% overnight.")
+        self.add_news({
+            "headline": f"{biggest[1]} led the overnight move",
+            "target": biggest[1],
+            "price_impact": biggest[2],
+            "sentiment_impact": 0.0,
+            "ticker": f"{biggest[1]} moved {biggest[2] * 100:+.2f}% overnight.",
+            "explanation": "Daily movement came from drift, volatility, momentum, sentiment, rumours, and mean reversion.",
+        })
 
         if random.random() < self.market_event_chance:
             self.trigger_market_event()
@@ -836,39 +926,47 @@ class CryptoTraderApp:
         if avg_current < 0.4 * avg_init:
             for coin in self.coins:
                 coin["price"] *= 1.30
-            self.add_event("Relief rally: the whole market bounced 30%.")
+            self.add_news({
+                "headline": "Relief rally: the whole market bounced 30%",
+                "target": "Market",
+                "price_impact": 0.30,
+                "sentiment_impact": 0.07,
+                "ticker": "Relief rally: the whole market bounced 30%.",
+                "explanation": "Prices had fallen too far below their starting levels, so the market staged a broad recovery.",
+            })
 
     def trigger_market_event(self):
         events = [
-            ("Bull Run! All coins gain 30%", lambda: self.apply_all(1.30)),
-            ("Bear Market! All coins drop 30%", lambda: self.apply_all(0.70)),
-            ("Exchange Hack! All prices drop 20%", lambda: self.apply_all(0.80)),
-            ("Regulation! Big coins drop 15%, small coins unaffected", self.regulation_event),
-            ("Institutional bid! Majors gain 12%", lambda: self.apply_sector("Majors", 1.12)),
-            ("Infrastructure outage! Infrastructure coins drop 14%", lambda: self.apply_sector("Infrastructure", 0.86)),
-            ("Privacy demand jumps! Privacy coins gain 16%", lambda: self.apply_sector("Privacy", 1.16)),
-            ("Exchange volume boom! Exchange coins gain 13%", lambda: self.apply_sector("Exchange", 1.13)),
-            ("Meme hype fades! Meme coins drop 18%", lambda: self.apply_sector("Meme", 0.82)),
-            ("Bitcoin Adoption! Bitcoin up 5%", lambda: self.apply_named("bitcoin", 1.05)),
-            ("Bitcoin Crash! Bitcoin down 5%", lambda: self.apply_named("bitcoin", 0.95)),
-            ("Ethereum Scaling Success! Ethereum up 10%", lambda: self.apply_named("ethereum", 1.10)),
-            ("Ethereum Bug Found! Ethereum down 10%", lambda: self.apply_named("ethereum", 0.90)),
-            ("Binance Good News! BNB up 25%", lambda: self.apply_named("binance coin", 1.25)),
-            ("Binance FUD! BNB down 25%", lambda: self.apply_named("binance coin", 0.75)),
-            ("Polkadot Partnerships! Polkadot up 20%", lambda: self.apply_named("polkadot", 1.20)),
-            ("Polkadot Partnerships Fail! Polkadot down 20%", lambda: self.apply_named("polkadot", 0.80)),
-            ("Cardano Hard Fork! Cardano up 15%", lambda: self.apply_named("cardano", 1.15)),
-            ("Cardano Hard Fork Bug! Cardano down 15%", lambda: self.apply_named("cardano", 0.85)),
-            ("Elon Tweet! Dogecoin soars 50%", lambda: self.apply_named("dogecoin", 1.50)),
-            ("Dogecoin Dump! Dogecoin down 40%", lambda: self.apply_named("dogecoin", 0.60)),
-            ("Monero Privacy Boost! Monero up 10%", lambda: self.apply_named("monero", 1.10)),
-            ("Monero Privacy Crackdown! Monero down 10%", lambda: self.apply_named("monero", 0.90)),
-            ("Chainlink Integration! Chainlink up 25%", lambda: self.apply_named("chainlink", 1.25)),
-            ("Chainlink Rejection! Chainlink down 25%", lambda: self.apply_named("chainlink", 0.75)),
+            self.make_news_event("Bull Run! All coins gain 30%", "Market", 0.30, 0.09, "Market-wide bull run lifts every coin.", "All coins surged as risk appetite returned.", lambda: self.apply_all(1.30)),
+            self.make_news_event("Bear Market! All coins drop 30%", "Market", -0.30, -0.09, "Bear market shock hits every coin.", "The whole market sold off as traders reduced exposure.", lambda: self.apply_all(0.70)),
+            self.make_news_event("Exchange Hack! All prices drop 20%", "Market", -0.20, -0.08, "Exchange hack knocks confidence across crypto.", "Security fears pressured every coin at once.", lambda: self.apply_all(0.80)),
+            self.make_news_event("Regulation! Big coins drop 15%", "Large-cap coins", -0.15, -0.06, "Regulatory pressure hits higher-priced coins.", "Bigger coins sold off while smaller coins were less affected.", self.regulation_event),
+            self.make_news_event("Institutional bid! Majors gain 12%", "Majors", 0.12, 0.05, "Institutions bid up Bitcoin and Ethereum.", "Major coins gained as bigger money stepped in.", lambda: self.apply_sector("Majors", 1.12)),
+            self.make_news_event("Infrastructure outage! Infrastructure coins drop 14%", "Infrastructure", -0.14, -0.05, "Infrastructure outage pressures DOT, ADA, and LINK.", "Network reliability concerns hit infrastructure names.", lambda: self.apply_sector("Infrastructure", 0.86)),
+            self.make_news_event("Privacy demand jumps! Privacy coins gain 16%", "Privacy", 0.16, 0.06, "Privacy demand lifts Monero.", "Demand for private transactions improved sentiment.", lambda: self.apply_sector("Privacy", 1.16)),
+            self.make_news_event("Exchange volume boom! Exchange coins gain 13%", "Exchange", 0.13, 0.05, "Trading volume boom lifts exchange tokens.", "Higher activity helped exchange-linked assets.", lambda: self.apply_sector("Exchange", 1.13)),
+            self.make_news_event("Meme hype fades! Meme coins drop 18%", "Meme", -0.18, -0.07, "Meme hype fades and DOGE sells off.", "Speculative appetite cooled quickly.", lambda: self.apply_sector("Meme", 0.82)),
+            self.make_news_event("Bitcoin Adoption! Bitcoin up 5%", "Bitcoin", 0.05, 0.03, "Bitcoin adoption headline boosts BTC.", "Adoption news added mild positive pressure.", lambda: self.apply_named("bitcoin", 1.05)),
+            self.make_news_event("Bitcoin Crash! Bitcoin down 5%", "Bitcoin", -0.05, -0.03, "Bitcoin crash headline weighs on BTC.", "Bitcoin slipped as short-term holders took risk off.", lambda: self.apply_named("bitcoin", 0.95)),
+            self.make_news_event("Ethereum Scaling Success! Ethereum up 10%", "Ethereum", 0.10, 0.04, "Ethereum scaling success boosts ETH.", "Scaling optimism improved sentiment.", lambda: self.apply_named("ethereum", 1.10)),
+            self.make_news_event("Ethereum Bug Found! Ethereum down 10%", "Ethereum", -0.10, -0.05, "Ethereum bug report pressures ETH.", "Technical concerns cooled Ethereum demand.", lambda: self.apply_named("ethereum", 0.90)),
+            self.make_news_event("Binance Good News! BNB up 25%", "Binance Coin", 0.25, 0.08, "Exchange headline sends BNB higher.", "Positive exchange news boosted confidence in Binance Coin.", lambda: self.apply_named("binance coin", 1.25)),
+            self.make_news_event("Binance FUD! BNB down 25%", "Binance Coin", -0.25, -0.08, "Exchange fears hit BNB.", "Uncertainty around exchange activity triggered a fast selloff.", lambda: self.apply_named("binance coin", 0.75)),
+            self.make_news_event("Polkadot Partnerships! Polkadot up 20%", "Polkadot", 0.20, 0.07, "Polkadot partnership chatter lifts DOT.", "Infrastructure optimism pulled buyers into Polkadot.", lambda: self.apply_named("polkadot", 1.20)),
+            self.make_news_event("Polkadot Partnerships Fail! Polkadot down 20%", "Polkadot", -0.20, -0.07, "Polkadot partnership hopes fade.", "A failed partnership story weakened DOT sentiment.", lambda: self.apply_named("polkadot", 0.80)),
+            self.make_news_event("Cardano Hard Fork! Cardano up 15%", "Cardano", 0.15, 0.06, "Cardano hard fork optimism lifts ADA.", "Upgrade optimism helped Cardano catch a bid.", lambda: self.apply_named("cardano", 1.15)),
+            self.make_news_event("Cardano Hard Fork Bug! Cardano down 15%", "Cardano", -0.15, -0.06, "Cardano fork bug knocks ADA.", "Upgrade risk pressured Cardano after the bug report.", lambda: self.apply_named("cardano", 0.85)),
+            self.make_news_event("Elon Tweet! Dogecoin soars 50%", "Dogecoin", 0.50, 0.12, "Celebrity hype sends DOGE vertical.", "Meme demand spiked fast, but the setup is extremely volatile.", lambda: self.apply_named("dogecoin", 1.50)),
+            self.make_news_event("Dogecoin Dump! Dogecoin down 40%", "Dogecoin", -0.40, -0.12, "Dogecoin hype snaps back hard.", "Meme speculation unwound rapidly.", lambda: self.apply_named("dogecoin", 0.60)),
+            self.make_news_event("Monero Privacy Boost! Monero up 10%", "Monero", 0.10, 0.05, "Privacy demand boosts Monero.", "Demand for private transfers lifted XMR sentiment.", lambda: self.apply_named("monero", 1.10)),
+            self.make_news_event("Monero Privacy Crackdown! Monero down 10%", "Monero", -0.10, -0.05, "Privacy crackdown pressures Monero.", "Regulatory attention reduced appetite for privacy coins.", lambda: self.apply_named("monero", 0.90)),
+            self.make_news_event("Chainlink Integration! Chainlink up 25%", "Chainlink", 0.25, 0.08, "New integration lifts Chainlink.", "Oracle adoption news improved Chainlink momentum.", lambda: self.apply_named("chainlink", 1.25)),
+            self.make_news_event("Chainlink Rejection! Chainlink down 25%", "Chainlink", -0.25, -0.08, "Integration rejection hits Chainlink.", "A rejected integration cooled LINK demand.", lambda: self.apply_named("chainlink", 0.75)),
         ]
-        label, action = random.choice(events)
-        action()
-        self.add_event(label)
+        event = random.choice(events)
+        event["apply"]()
+        event.pop("apply")
+        self.add_news(event)
 
     def apply_all(self, factor):
         for coin in self.coins:
@@ -969,7 +1067,14 @@ class CryptoTraderApp:
         rumour = random.choice(templates).copy()
         rumour["days_left"] = 3
         self.active_rumours.append(rumour)
-        self.add_event(f"{rumour['label']} Strength: {rumour['strength']}. Signal lasts 3 days.")
+        self.add_news({
+            "headline": rumour["label"],
+            "target": rumour["coin"] or rumour["sector"],
+            "price_impact": 0.0,
+            "sentiment_impact": rumour["sentiment_bias"],
+            "ticker": f"{rumour['label']} Strength: {rumour['strength']}.",
+            "explanation": "Rumours are weak signals. They raise volatility and sentiment pressure for 3 days.",
+        })
 
     def sort_by_price(self):
         self.sort_reverse = not self.sort_reverse
@@ -1074,11 +1179,13 @@ class CryptoTraderApp:
                 "amount": 0.0,
                 "cost": 0.0,
                 "days": [],
+                "oldest_day": lot["day"],
             })
             amount = lot["amount_remaining"]
             data["amount"] += amount
             data["cost"] += amount * lot["buy_price"]
             data["days"].append(lot["day"])
+            data["oldest_day"] = min(data["oldest_day"], lot["day"])
 
         positions = []
         for data in grouped.values():
@@ -1087,11 +1194,13 @@ class CryptoTraderApp:
                 day_label = f"Day {days[0]}"
             else:
                 day_label = f"Days {days[0]}-{days[-1]}"
+            held_days = max(1, self.day - data["oldest_day"] + 1)
             positions.append({
                 "coin": data["coin"],
                 "amount": data["amount"],
                 "avg_buy_price": data["cost"] / data["amount"] if data["amount"] else 0.0,
                 "day_label": day_label,
+                "held_days": f"{held_days} day" if held_days == 1 else f"{held_days} days",
             })
         return sorted(positions, key=lambda item: item["coin"])
 
