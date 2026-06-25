@@ -256,27 +256,60 @@ class CryptoTraderApp:
     # ======================
     def create_game_frame(self):
         self.game_frame.configure(style="App.TFrame", padding=0)
-        self.game_frame.columnconfigure(0, weight=0, minsize=210)
+        self.game_frame.columnconfigure(0, weight=0, minsize=260)
         self.game_frame.columnconfigure(1, weight=1)
         self.game_frame.rowconfigure(0, weight=1)
 
-        nav = ttk.Frame(self.game_frame, style="Nav.TFrame", padding=18)
-        nav.grid(row=0, column=0, sticky="nsew")
-        ttk.Label(nav, text="CRYPTO", style="NavLogo.TLabel").pack(anchor="w")
-        ttk.Label(nav, text="TRADER", style="NavAccent.TLabel").pack(anchor="w", pady=(0, 28))
-        nav_actions = (
-            ("Dashboard", self.focus_dashboard),
-            ("Market", self.focus_market),
-            ("Wallet", self.focus_wallet),
-            ("Trade History", self.focus_trade_history),
-            ("Achievements", self.show_achievements),
-            ("High Scores", self.load_and_show_high_scores),
-            ("How To Play", self.show_guide),
-        )
-        for item, command in nav_actions:
-            ttk.Button(nav, text=item, style="Soft.TButton", command=command).pack(fill="x", pady=5)
-        broker_card = ttk.Frame(nav, style="NavCard.TFrame", padding=14)
-        broker_card.pack(side="bottom", fill="x", pady=(20, 0))
+        rail = tk.Frame(self.game_frame, bg=self.colors["nav"], padx=18, pady=18)
+        rail.grid(row=0, column=0, sticky="nsew")
+        rail.columnconfigure(0, weight=1)
+        tk.Label(rail, text="CRYPTO", bg=self.colors["nav"], fg="#ffffff", font=("Segoe UI", 22, "bold")).grid(row=0, column=0, sticky="w")
+        tk.Label(rail, text="TRADER", bg=self.colors["nav"], fg=self.colors["gold"], font=("Segoe UI", 20, "bold")).grid(row=1, column=0, sticky="w", pady=(0, 20))
+
+        tk.Label(rail, text="TRADE RAIL", bg=self.colors["nav"], fg="#a9bdd6", font=("Segoe UI", 9, "bold")).grid(row=2, column=0, sticky="w")
+        self.rail_coin_name = tk.Label(rail, text="Bitcoin", bg=self.colors["nav"], fg="#ffffff", font=("Segoe UI", 17, "bold"))
+        self.rail_coin_name.grid(row=3, column=0, sticky="w", pady=(2, 0))
+        self.rail_price = tk.Label(rail, text="GBP 0.00", bg=self.colors["nav"], fg="#d7e5f7", font=("Segoe UI", 11, "bold"))
+        self.rail_price.grid(row=4, column=0, sticky="w", pady=(6, 0))
+        self.rail_move = tk.Label(rail, text="+0.00% today", bg=self.colors["nav"], fg="#d7e5f7", font=("Segoe UI", 10))
+        self.rail_move.grid(row=5, column=0, sticky="w")
+        self.rail_owned = tk.Label(rail, text="Owned 0", bg=self.colors["nav"], fg="#a9bdd6", font=("Segoe UI", 9))
+        self.rail_owned.grid(row=6, column=0, sticky="w", pady=(0, 12))
+
+        self.rail_signal = tk.Label(rail, text="", bg=self.colors["nav_alt"], fg="#ffffff", font=("Segoe UI", 10, "bold"), padx=8, pady=5)
+        self.rail_signal.grid(row=7, column=0, sticky="ew", pady=(0, 4))
+        self.rail_confidence = tk.Label(rail, text="", bg=self.colors["nav"], fg="#d7e5f7", font=("Segoe UI", 9), wraplength=210, justify="left")
+        self.rail_confidence.grid(row=8, column=0, sticky="w")
+        self.rail_risk = tk.Label(rail, text="", bg=self.colors["nav"], fg="#d7e5f7", font=("Segoe UI", 9), wraplength=210, justify="left")
+        self.rail_risk.grid(row=9, column=0, sticky="w")
+        self.rail_helper = tk.Label(rail, text="", bg=self.colors["nav"], fg="#a9bdd6", font=("Segoe UI", 9), wraplength=210, justify="left")
+        self.rail_helper.grid(row=10, column=0, sticky="w", pady=(2, 12))
+
+        tk.Label(rail, text="AMOUNT", bg=self.colors["nav"], fg="#a9bdd6", font=("Segoe UI", 9, "bold")).grid(row=11, column=0, sticky="w")
+        self.trade_amount = tk.StringVar(value="1")
+        tk.Entry(rail, textvariable=self.trade_amount, relief="flat", font=("Segoe UI", 12), bg="#ffffff", fg=self.colors["ink"]).grid(row=12, column=0, sticky="ew", ipady=6, pady=(4, 8))
+        quick = tk.Frame(rail, bg=self.colors["nav"])
+        quick.grid(row=13, column=0, sticky="ew")
+        for col, amount in enumerate((1, 10, 100, 1000)):
+            quick.columnconfigure(col, weight=1)
+            tk.Button(quick, text=str(amount), command=lambda value=amount: self.set_trade_amount(value), bg=self.colors["nav_alt"], fg="#ffffff", relief="flat", font=("Segoe UI", 9)).grid(row=0, column=col, sticky="ew", padx=(0 if col == 0 else 4, 0))
+
+        actions = tk.Frame(rail, bg=self.colors["nav"])
+        actions.grid(row=14, column=0, sticky="ew", pady=(12, 0))
+        actions.columnconfigure(0, weight=1)
+        actions.columnconfigure(1, weight=1)
+        tk.Button(actions, text="BUY", command=self.buy_selected, bg=self.colors["green"], fg="#ffffff", relief="flat", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="ew", padx=(0, 5), ipady=8)
+        tk.Button(actions, text="SELL", command=self.sell_selected, bg="#334155", fg="#ffffff", relief="flat", font=("Segoe UI", 12, "bold")).grid(row=0, column=1, sticky="ew", ipady=8)
+        tk.Button(actions, text="Buy Max", command=self.buy_selected_max, bg=self.colors["nav_alt"], fg="#ffffff", relief="flat", font=("Segoe UI", 10, "bold")).grid(row=1, column=0, sticky="ew", padx=(0, 5), pady=(7, 0), ipady=5)
+        tk.Button(actions, text="Sell All", command=self.sell_selected_max, bg=self.colors["nav_alt"], fg="#ffffff", relief="flat", font=("Segoe UI", 10, "bold")).grid(row=1, column=1, sticky="ew", pady=(7, 0), ipady=5)
+
+        self.rail_cash = tk.Label(rail, text="Cash GBP 0.00", bg=self.colors["nav"], fg="#d7e5f7", font=("Segoe UI", 9, "bold"))
+        self.rail_cash.grid(row=15, column=0, sticky="w", pady=(14, 0))
+        self.rail_risk_limit = tk.Label(rail, text="Risk GBP 0/0", bg=self.colors["nav"], fg="#a9bdd6", font=("Segoe UI", 9))
+        self.rail_risk_limit.grid(row=16, column=0, sticky="w")
+
+        broker_card = ttk.Frame(rail, style="NavCard.TFrame", padding=14)
+        broker_card.grid(row=17, column=0, sticky="ew", pady=(18, 0))
         ttk.Label(broker_card, text="ARCADE BROKER", style="NavMuted.TLabel").pack(anchor="w")
         self.nav_rank_label = ttk.Label(broker_card, text="Rookie", style="NavValue.TLabel")
         self.nav_rank_label.pack(anchor="w", pady=(2, 12))
@@ -308,8 +341,12 @@ class CryptoTraderApp:
         self.day_label.grid(row=1, column=1, sticky="w")
         self.day_progress = ttk.Progressbar(top, maximum=100, mode="determinate")
         self.day_progress.grid(row=2, column=1, sticky="ew", pady=(8, 0), padx=(0, 18))
-        ttk.Button(top, text="High scores", style="Soft.TButton", command=self.load_and_show_high_scores).grid(row=0, column=2, sticky="ew", padx=(10, 0))
-        ttk.Button(top, text="Exit run", style="Soft.TButton", command=self.end_game).grid(row=1, column=2, sticky="ew", padx=(10, 0), pady=6)
+        utilities = ttk.Frame(top, style="Panel.TFrame")
+        utilities.grid(row=0, column=2, rowspan=2, sticky="ne", padx=(10, 0))
+        ttk.Button(utilities, text="Scores", style="Soft.TButton", command=self.load_and_show_high_scores).grid(row=0, column=0, padx=(0, 5), pady=(0, 5))
+        ttk.Button(utilities, text="Awards", style="Soft.TButton", command=self.show_achievements).grid(row=0, column=1, pady=(0, 5))
+        ttk.Button(utilities, text="Guide", style="Soft.TButton", command=self.show_guide).grid(row=1, column=0, padx=(0, 5))
+        ttk.Button(utilities, text="Exit", style="Soft.TButton", command=self.end_game).grid(row=1, column=1)
         self.next_day_button = ttk.Button(top, text="Next day", style="Accent.TButton", command=self.next_day)
         self.next_day_button.grid(row=2, column=2, sticky="ew", padx=(10, 0))
 
@@ -367,23 +404,6 @@ class CryptoTraderApp:
         self.signal_risk.grid(row=5, column=0, columnspan=2, sticky="w")
         self.signal_explanation = ttk.Label(decision, text="", style="Muted.TLabel", wraplength=380)
         self.signal_explanation.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(0, 10))
-        ttk.Label(
-            decision,
-            text="Costs: 0.5% fee plus 0.25% spread on each trade",
-            style="Muted.TLabel",
-        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(0, 8))
-        ttk.Label(decision, text="Amount", style="CardLabel.TLabel").grid(row=8, column=0, sticky="w", pady=(0, 4))
-        self.trade_amount = tk.StringVar(value="1")
-        ttk.Entry(decision, textvariable=self.trade_amount, width=12).grid(row=9, column=0, columnspan=2, sticky="ew", pady=(0, 8))
-        quick = ttk.Frame(decision, style="Panel.TFrame")
-        quick.grid(row=10, column=0, columnspan=2, sticky="ew")
-        for col, amount in enumerate((1, 10, 100, 1000)):
-            quick.columnconfigure(col, weight=1)
-            ttk.Button(quick, text=str(amount), style="Soft.TButton", command=lambda value=amount: self.set_trade_amount(value)).grid(row=0, column=col, sticky="ew", padx=(0 if col == 0 else 5, 0))
-        ttk.Button(decision, text="BUY", style="Buy.TButton", command=self.buy_selected).grid(row=11, column=0, sticky="ew", pady=(12, 0), padx=(0, 5))
-        ttk.Button(decision, text="SELL", style="Soft.TButton", command=self.sell_selected).grid(row=11, column=1, sticky="ew", pady=(12, 0))
-        ttk.Button(decision, text="Buy max", style="Soft.TButton", command=self.buy_selected_max).grid(row=12, column=0, sticky="ew", pady=(8, 0), padx=(0, 5))
-        ttk.Button(decision, text="Sell all", style="Soft.TButton", command=self.sell_selected_max).grid(row=12, column=1, sticky="ew", pady=(8, 0))
 
         chart_panel = ttk.Frame(self.selected_panel, style="Panel.TFrame")
         chart_panel.grid(row=1, column=1, sticky="nsew", pady=(12, 0))
@@ -447,6 +467,7 @@ class CryptoTraderApp:
         self.update_market_tiles()
         self.update_position_tiles()
         self.update_trade_panel()
+        self.update_trade_rail()
         self.update_chart()
         self.update_feed()
         self.update_trade_history()
@@ -472,6 +493,9 @@ class CryptoTraderApp:
         self.nav_xp_bar["value"] = min(100, (net_worth / 50000) * 100)
         self.day_progress["value"] = min(100, (self.day / self.max_days) * 100)
         self.next_day_button.config(text=f"Next day ({self.day}/{self.max_days})")
+        if hasattr(self, "rail_cash"):
+            self.rail_cash.config(text=f"Cash GBP {self.cash:,.2f}")
+            self.rail_risk_limit.config(text=f"Risk used GBP {holdings:,.0f}/{self.risk_limit:,.0f}")
 
     def update_news_ticker(self):
         if not hasattr(self, "news_ticker_label"):
@@ -599,6 +623,47 @@ class CryptoTraderApp:
         self.selected_news.config(text=f"Latest relevant news: {relevant_news['ticker']}")
         self.update_signal_helper_display(signal, mode)
         self.draw_coin_badge(coin)
+
+    def update_trade_rail(self):
+        if not hasattr(self, "rail_coin_name"):
+            return
+        coin = self.get_selected_coin()
+        change = self.get_change_percent(coin)
+        signal = self.get_coin_signal_rating(coin)
+        mode = self.get_signal_visibility_mode()
+        move_color = self.colors["green"] if change >= 0 else self.colors["red"]
+        self.rail_coin_name.config(text=coin["name"])
+        self.rail_price.config(text=f"GBP {coin['price']:,.5f}")
+        self.rail_move.config(text=f"{change:+.2f}% today", fg=move_color)
+        self.rail_owned.config(text=f"Owned {self.format_amount(coin['inventory'])}")
+        self.update_rail_signal_display(signal, mode)
+
+    def update_rail_signal_display(self, signal, mode):
+        rail_widgets = (
+            self.rail_signal,
+            self.rail_confidence,
+            self.rail_risk,
+            self.rail_helper,
+        )
+        if mode == "hidden":
+            for widget in rail_widgets:
+                widget.grid_remove()
+            return
+
+        for widget in rail_widgets:
+            widget.grid()
+        signal_color = self.get_signal_color(signal["label"])
+        self.rail_signal.config(text=signal["label"], bg=signal_color)
+
+        if mode == "guided":
+            self.rail_confidence.config(text=f"Confidence: {signal['confidence']}%")
+            self.rail_risk.config(text=f"Risk: {signal['risk']}")
+            self.rail_helper.config(text=f"{signal['action']}. {signal['helper']}.")
+            return
+
+        self.rail_confidence.config(text=f"Confidence: {signal['confidence']}%")
+        self.rail_risk.grid_remove()
+        self.rail_helper.config(text=signal["short_explanation"])
 
     def draw_coin_badge(self, coin):
         canvas = self.coin_badge
@@ -891,6 +956,7 @@ class CryptoTraderApp:
         self.selected_coin_name = name
         self.update_market_tiles()
         self.update_trade_panel()
+        self.update_trade_rail()
         self.update_chart()
 
     def on_coin_selected(self, _event=None):
