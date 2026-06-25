@@ -57,11 +57,22 @@ python crypto_game.py
 Install PyInstaller, then run:
 
 ```powershell
-pyinstaller --onefile --windowed --name crypto_game_arcade_broker_engine_polish crypto_game.py
+pyinstaller --onefile --windowed --name crypto_game_v1.1 crypto_game.py
 ```
 
 Packaged builds should be uploaded through GitHub Releases rather than committed
 to the repository.
+
+Local executable builds should use semantic-ish version names:
+
+```text
+crypto_game_v1.1.exe
+crypto_game_v1.2.exe
+crypto_game_v1.3.exe
+```
+
+Use the next minor version for normal feature/fix builds, and reserve bigger
+version jumps for larger redesigns.
 
 High scores are stored locally in `%APPDATA%/Crypto Trader/high_scores.json` on
 Windows, with a local fallback if that folder is unavailable.
