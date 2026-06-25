@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import random
 import sys
@@ -43,6 +44,9 @@ class CryptoTraderApp:
         self.best_trade = 0.0
         self.worst_trade = 0.0
         self.market_event_chance = 0.1
+        self.rumour_chance = 0.22
+        self.transaction_fee_rate = 0.005
+        self.spread_rate = 0.0025
         self.high_score_file = self.get_data_path("high_scores.json")
         self.selected_coin_name = "Bitcoin"
         self.event_feed = deque(maxlen=8)
@@ -50,16 +54,17 @@ class CryptoTraderApp:
         self.wallet_lots = []
         self.next_lot_id = 1
         self.trade_history = deque(maxlen=80)
+        self.active_rumours = []
 
         self.coins = [
-            self.make_coin("Bitcoin", 20000.0, 0.07),
-            self.make_coin("Ethereum", 1500.0, 0.10),
-            self.make_coin("Binance Coin", 300.0, 0.08),
-            self.make_coin("Polkadot", 8.0, 0.12),
-            self.make_coin("Cardano", 0.40, 0.16),
-            self.make_coin("Dogecoin", 0.10, 0.25),
-            self.make_coin("Monero", 151.0, 0.09),
-            self.make_coin("Chainlink", 18.0, 0.14),
+            self.make_coin("Bitcoin", 20000.0, 0.07, "Majors"),
+            self.make_coin("Ethereum", 1500.0, 0.10, "Majors"),
+            self.make_coin("Binance Coin", 300.0, 0.08, "Exchange"),
+            self.make_coin("Polkadot", 8.0, 0.12, "Infrastructure"),
+            self.make_coin("Cardano", 0.40, 0.16, "Infrastructure"),
+            self.make_coin("Dogecoin", 0.10, 0.25, "Meme"),
+            self.make_coin("Monero", 151.0, 0.09, "Privacy"),
+            self.make_coin("Chainlink", 18.0, 0.14, "Infrastructure"),
         ]
 
         self.configure_styles()
@@ -74,9 +79,10 @@ class CryptoTraderApp:
         self.create_game_frame()
         self.show_start_frame()
 
-    def make_coin(self, name, price, volatility):
+    def make_coin(self, name, price, volatility, sector):
         return {
             "name": name,
+            "sector": sector,
             "price": price,
             "initial_price": price,
             "inventory": 0.0,
@@ -199,6 +205,7 @@ class CryptoTraderApp:
         self.event_feed.clear()
         self.wallet_lots.clear()
         self.trade_history.clear()
+        self.active_rumours.clear()
         self.next_lot_id = 1
         self.total_trades = 0
         self.best_trade = 0.0
@@ -245,8 +252,17 @@ class CryptoTraderApp:
         nav.grid(row=0, column=0, sticky="nsew")
         ttk.Label(nav, text="CRYPTO", style="NavLogo.TLabel").pack(anchor="w")
         ttk.Label(nav, text="TRADER", style="NavAccent.TLabel").pack(anchor="w", pady=(0, 28))
-        for item in ("Dashboard", "Market", "Wallet", "Trade History", "Achievements", "High Scores"):
-            ttk.Label(nav, text=item, style="NavItem.TLabel").pack(anchor="w", pady=8)
+        nav_actions = (
+            ("Dashboard", self.focus_dashboard),
+            ("Market", self.focus_market),
+            ("Wallet", self.focus_wallet),
+            ("Trade History", self.focus_trade_history),
+            ("Achievements", self.show_achievements),
+            ("High Scores", self.load_and_show_high_scores),
+            ("How To Play", self.show_guide),
+        )
+        for item, command in nav_actions:
+            ttk.Button(nav, text=item, style="Soft.TButton", command=command).pack(fill="x", pady=5)
         broker_card = ttk.Frame(nav, style="NavCard.TFrame", padding=14)
         broker_card.pack(side="bottom", fill="x", pady=(20, 0))
         ttk.Label(broker_card, text="ARCADE BROKER", style="NavMuted.TLabel").pack(anchor="w")
@@ -373,6 +389,11 @@ class CryptoTraderApp:
         self.selected_meta.pack(anchor="w", pady=(2, 0))
         self.selected_mood = ttk.Label(text_stack, text="", style="Muted.TLabel")
         self.selected_mood.pack(anchor="w", pady=(2, 0))
+        ttk.Label(
+            self.trade_panel,
+            text="Costs: 0.5% fee plus 0.25% spread on each trade",
+            style="Muted.TLabel",
+        ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(0, 10))
         ttk.Label(self.trade_panel, text="Amount", style="CardLabel.TLabel").grid(row=3, column=0, sticky="w", pady=(0, 4))
         self.trade_amount = tk.StringVar(value="1")
         ttk.Entry(self.trade_panel, textvariable=self.trade_amount, width=12).grid(row=4, column=0, columnspan=4, sticky="ew", pady=(0, 10))
@@ -516,7 +537,9 @@ class CryptoTraderApp:
         self.selected_meta.config(
             text=f"Price GBP {coin['price']:,.5f} | Move {change:+.2f}% | Owned {self.format_amount(coin['inventory'])}"
         )
-        self.selected_mood.config(text=f"Momentum {coin['momentum'] * 100:+.2f}% | Sentiment {coin['sentiment'] * 100:+.2f}%")
+        self.selected_mood.config(
+            text=f"{coin['sector']} | Momentum {coin['momentum'] * 100:+.2f}% | Sentiment {coin['sentiment'] * 100:+.2f}%"
+        )
         self.draw_coin_badge(coin)
 
     def draw_coin_badge(self, coin):
@@ -609,6 +632,45 @@ class CryptoTraderApp:
             self.update_trade_panel()
             self.update_chart()
 
+    def focus_dashboard(self):
+        self.hero_net_worth.focus_set()
+
+    def focus_market(self):
+        self.market_tree.focus_set()
+
+    def focus_wallet(self):
+        self.wallet_tree.focus_set()
+
+    def focus_trade_history(self):
+        self.history_list.focus_set()
+
+    def show_achievements(self):
+        positions = len(self.get_wallet_positions())
+        net_worth = self.cash + self.get_holdings_value()
+        achievements = [
+            ("First Trade", bool(self.trade_history), "Make any buy or sell."),
+            ("Diversifier", positions >= 3, "Hold 3 different coins."),
+            ("Broker", net_worth >= 10000, "Reach GBP 10,000 net worth."),
+            ("Market Maker", net_worth >= 25000, "Reach GBP 25,000 net worth."),
+            ("Whale", net_worth >= 50000, "Reach GBP 50,000 net worth."),
+        ]
+        lines = []
+        for name, complete, description in achievements:
+            state = "Done" if complete else "Open"
+            lines.append(f"{state}: {name} - {description}")
+        messagebox.showinfo("Achievements", "\n".join(lines))
+
+    def show_guide(self):
+        messagebox.showinfo(
+            "How To Play",
+            "Pick coins from Market Watch, choose an amount, then Buy or Sell.\n\n"
+            "Momentum means recent price movement is carrying forward.\n\n"
+            "Sentiment is hidden market mood affecting that coin.\n\n"
+            "Rumours are weak signals. They can raise volatility or sentiment for a few days before a move.\n\n"
+            "Risk limit is based on portfolio value, not coin units.\n\n"
+            "Every trade pays a 0.5% fee and crosses a 0.25% spread, so overtrading has a cost.",
+        )
+
     def set_trade_amount(self, amount):
         self.trade_amount.set(str(amount))
 
@@ -646,30 +708,34 @@ class CryptoTraderApp:
         if self.game_over:
             return
         coin = self.coins[index]
-        cost = coin["price"] * amount
-        new_value = self.get_holdings_value() + cost
+        execution_price = coin["price"] * (1 + self.spread_rate)
+        gross_cost = execution_price * amount
+        fee = gross_cost * self.transaction_fee_rate
+        total_cost = gross_cost + fee
+        new_value = self.get_holdings_value() + gross_cost
 
-        if cost > self.cash:
+        if total_cost > self.cash:
             self.show_notice("Not enough cash for that buy.")
             return
         if new_value > self.wallet_capacity:
             self.show_notice("That buy exceeds your portfolio risk limit.")
             return
 
-        self.cash -= cost
+        self.cash -= total_cost
         self.wallet_lots.append({
             "id": self.next_lot_id,
             "coin": coin["name"],
             "day": min(self.day, self.max_days),
             "amount_bought": amount,
             "amount_remaining": amount,
-            "buy_price": coin["price"],
-            "cost": cost,
+            "buy_price": execution_price,
+            "cost": gross_cost,
+            "fee": fee,
         })
         self.next_lot_id += 1
         self.sync_coin_from_lots(coin)
-        self.log_trade("BUY", coin, amount, coin["price"], cost, 0.0)
-        self.add_event(f"Bought {self.format_amount(amount)} {coin['name']} for GBP {cost:,.2f}.")
+        self.log_trade("BUY", coin, amount, execution_price, total_cost, -fee)
+        self.add_event(f"Bought {self.format_amount(amount)} {coin['name']} for GBP {total_cost:,.2f} including fees.")
         self.update_dashboard()
 
     def sell_coin(self, index, amount):
@@ -680,7 +746,10 @@ class CryptoTraderApp:
             self.show_notice("Not enough inventory to sell.")
             return
 
-        revenue = coin["price"] * amount
+        execution_price = coin["price"] * (1 - self.spread_rate)
+        gross_revenue = execution_price * amount
+        fee = gross_revenue * self.transaction_fee_rate
+        revenue = gross_revenue - fee
         cost_basis = coin["average_cost"] * amount
         trade_profit = revenue - cost_basis
         self.total_trades += 1
@@ -689,9 +758,9 @@ class CryptoTraderApp:
         self.consume_wallet_lots(coin["name"], amount)
         self.sync_coin_from_lots(coin)
         self.cash += revenue
-        self.log_trade("SELL", coin, amount, coin["price"], revenue, trade_profit)
+        self.log_trade("SELL", coin, amount, execution_price, revenue, trade_profit)
         result = "profit" if trade_profit >= 0 else "loss"
-        self.add_event(f"Sold {self.format_amount(amount)} {coin['name']} for GBP {revenue:,.2f} ({result} GBP {trade_profit:,.2f}).")
+        self.add_event(f"Sold {self.format_amount(amount)} {coin['name']} for GBP {revenue:,.2f} after fees ({result} GBP {trade_profit:,.2f}).")
         self.update_dashboard()
 
     def buy_max(self, index):
@@ -699,8 +768,11 @@ class CryptoTraderApp:
             return
         coin = self.coins[index]
         value_capacity_left = max(0.0, self.wallet_capacity - self.get_holdings_value())
-        amount_to_buy = min(self.cash / coin["price"], value_capacity_left / coin["price"])
-        amount_to_buy = round(amount_to_buy, 8)
+        execution_price = coin["price"] * (1 + self.spread_rate)
+        cash_limited_amount = self.cash / (execution_price * (1 + self.transaction_fee_rate))
+        capacity_limited_amount = value_capacity_left / execution_price
+        amount_to_buy = min(cash_limited_amount, capacity_limited_amount)
+        amount_to_buy = math.floor(amount_to_buy * 100000000) / 100000000
         if amount_to_buy <= 0:
             self.show_notice("Cannot buy any more of this coin.")
             return
@@ -725,9 +797,10 @@ class CryptoTraderApp:
 
         for coin in self.coins:
             coin["previous_price"] = coin["price"]
-            shock = random.gauss(0, coin["volatility"] * 0.42)
+            volatility_bonus, sentiment_bias = self.get_coin_signal(coin)
+            shock = random.gauss(0, (coin["volatility"] + volatility_bonus) * 0.42)
             trend = coin["momentum"] * 0.32
-            sentiment = coin["sentiment"] * 0.26
+            sentiment = (coin["sentiment"] + sentiment_bias) * 0.26
             price_ratio = coin["price"] / coin["initial_price"]
             mean_reversion = -0.012 * (price_ratio - 1)
             total_change = daily_drift + shock + trend + sentiment + mean_reversion
@@ -742,12 +815,15 @@ class CryptoTraderApp:
             movers.append((abs(total_change), coin["name"], total_change))
 
         self.check_market_recovery()
+        self.age_rumours()
 
         biggest = max(movers, key=lambda item: item[0])
         self.add_event(f"{biggest[1]} moved {biggest[2] * 100:+.2f}% overnight.")
 
         if random.random() < self.market_event_chance:
             self.trigger_market_event()
+        if random.random() < self.rumour_chance:
+            self.seed_rumour()
 
         if self.day > self.max_days:
             self.end_game()
@@ -768,6 +844,11 @@ class CryptoTraderApp:
             ("Bear Market! All coins drop 30%", lambda: self.apply_all(0.70)),
             ("Exchange Hack! All prices drop 20%", lambda: self.apply_all(0.80)),
             ("Regulation! Big coins drop 15%, small coins unaffected", self.regulation_event),
+            ("Institutional bid! Majors gain 12%", lambda: self.apply_sector("Majors", 1.12)),
+            ("Infrastructure outage! Infrastructure coins drop 14%", lambda: self.apply_sector("Infrastructure", 0.86)),
+            ("Privacy demand jumps! Privacy coins gain 16%", lambda: self.apply_sector("Privacy", 1.16)),
+            ("Exchange volume boom! Exchange coins gain 13%", lambda: self.apply_sector("Exchange", 1.13)),
+            ("Meme hype fades! Meme coins drop 18%", lambda: self.apply_sector("Meme", 0.82)),
             ("Bitcoin Adoption! Bitcoin up 5%", lambda: self.apply_named("bitcoin", 1.05)),
             ("Bitcoin Crash! Bitcoin down 5%", lambda: self.apply_named("bitcoin", 0.95)),
             ("Ethereum Scaling Success! Ethereum up 10%", lambda: self.apply_named("ethereum", 1.10)),
@@ -802,6 +883,13 @@ class CryptoTraderApp:
                 self.adjust_coin_pressure(coin, factor - 1)
                 coin["price_history"].append(coin["price"])
 
+    def apply_sector(self, sector, factor):
+        for coin in self.coins:
+            if coin["sector"] == sector:
+                coin["price"] *= factor
+                self.adjust_coin_pressure(coin, factor - 1)
+                coin["price_history"].append(coin["price"])
+
     def regulation_event(self):
         for coin in self.coins:
             if coin["price"] > 100:
@@ -812,6 +900,76 @@ class CryptoTraderApp:
     def adjust_coin_pressure(self, coin, event_change):
         coin["sentiment"] = max(-0.22, min(0.22, coin["sentiment"] + event_change * 0.35))
         coin["momentum"] = max(-0.16, min(0.16, coin["momentum"] + event_change * 0.18))
+
+    def get_coin_signal(self, coin):
+        volatility_bonus = 0.0
+        sentiment_bias = 0.0
+        for rumour in self.active_rumours:
+            if rumour.get("coin") == coin["name"] or rumour.get("sector") == coin["sector"]:
+                volatility_bonus += rumour["volatility_bonus"]
+                sentiment_bias += rumour["sentiment_bias"]
+        return volatility_bonus, sentiment_bias
+
+    def age_rumours(self):
+        for rumour in self.active_rumours:
+            rumour["days_left"] -= 1
+        self.active_rumours = [rumour for rumour in self.active_rumours if rumour["days_left"] > 0]
+
+    def seed_rumour(self):
+        templates = [
+            {
+                "label": "Rumour: Ethereum developers hint at scaling news.",
+                "coin": "Ethereum",
+                "sector": None,
+                "strength": "Medium",
+                "volatility_bonus": 0.025,
+                "sentiment_bias": 0.018,
+            },
+            {
+                "label": "Rumour: institutional desks are watching majors.",
+                "coin": None,
+                "sector": "Majors",
+                "strength": "Low",
+                "volatility_bonus": 0.014,
+                "sentiment_bias": 0.012,
+            },
+            {
+                "label": "Rumour: infrastructure partnerships may land soon.",
+                "coin": None,
+                "sector": "Infrastructure",
+                "strength": "Medium",
+                "volatility_bonus": 0.026,
+                "sentiment_bias": 0.014,
+            },
+            {
+                "label": "Rumour: exchange regulators are circling.",
+                "coin": None,
+                "sector": "Exchange",
+                "strength": "High",
+                "volatility_bonus": 0.034,
+                "sentiment_bias": -0.018,
+            },
+            {
+                "label": "Rumour: celebrity chatter is building around memes.",
+                "coin": None,
+                "sector": "Meme",
+                "strength": "High",
+                "volatility_bonus": 0.05,
+                "sentiment_bias": 0.02,
+            },
+            {
+                "label": "Rumour: privacy coins face possible delistings.",
+                "coin": None,
+                "sector": "Privacy",
+                "strength": "Medium",
+                "volatility_bonus": 0.028,
+                "sentiment_bias": -0.014,
+            },
+        ]
+        rumour = random.choice(templates).copy()
+        rumour["days_left"] = 3
+        self.active_rumours.append(rumour)
+        self.add_event(f"{rumour['label']} Strength: {rumour['strength']}. Signal lasts 3 days.")
 
     def sort_by_price(self):
         self.sort_reverse = not self.sort_reverse

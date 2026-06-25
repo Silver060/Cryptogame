@@ -9,6 +9,9 @@ An offline desktop crypto trading game built with Python and Tkinter.
 - Compact visual wallet with combined positions and weighted average buy price
 - Trade ticket with quick buy/sell controls
 - Market mood, coin momentum, sentiment, and event-driven price movement
+- Weak rumour signals that raise sector/coin volatility for a few days
+- Sector-wide events for Majors, Meme, Privacy, Infrastructure, and Exchange coins
+- Transaction fees and buy/sell spread, so overtrading has a cost
 - Fractional crypto buying, including Buy Max for expensive coins like Bitcoin
 - Return-percentage high scores with difficulty and run length
 - Value-based portfolio risk limit instead of confusing coin-unit capacity
@@ -19,7 +22,7 @@ An offline desktop crypto trading game built with Python and Tkinter.
 1. Pick a difficulty and run length.
 2. Select a coin from Market Watch.
 3. Enter an amount or use Buy Max/Sell All.
-4. Watch market mood, momentum, sentiment, news, and your wallet P/L.
+4. Watch market mood, momentum, sentiment, rumours, news, and your wallet P/L.
 5. Survive the run and chase the highest return percentage.
 
 ## Scoring
@@ -43,6 +46,7 @@ Saved scores include:
 - Buy, Sell, Buy Max, or Sell All
 - Advance to the next day
 - Review wallet positions and trade history
+- Use the sidebar buttons for Market, Wallet, Trade History, Achievements, High Scores, and How To Play
 
 ## Run From Source
 
@@ -57,7 +61,7 @@ python crypto_game.py
 Install PyInstaller, then run:
 
 ```powershell
-pyinstaller --onefile --windowed --name crypto_game_v1.1 crypto_game.py
+pyinstaller --onefile --windowed --name crypto_game_v1.2 crypto_game.py
 ```
 
 Packaged builds should be uploaded through GitHub Releases rather than committed
@@ -80,7 +84,7 @@ Windows, with a local fallback if that folder is unavailable.
 ## Roadmap
 
 - GitHub Releases for downloadable builds
-- Achievements
-- More sector-based market events
-- Tutorial/tooltips for momentum, sentiment, and risk limit
+- More achievements
+- Richer rumour/event chains
+- Deeper tutorial/tooltips
 - Better charting
