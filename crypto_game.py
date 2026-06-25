@@ -501,19 +501,21 @@ class CryptoTraderApp:
         change = self.get_change_percent(coin)
         pl = (coin["price"] - coin["average_cost"]) * coin["inventory"] if coin["inventory"] else 0.0
         border_color = self.get_signal_color(signal["label"])
-        tile = tk.Frame(parent, bg=self.colors["panel"], highlightbackground=border_color, highlightthickness=2, bd=0)
+        is_selected = coin["name"] == self.selected_coin_name
+        tile_bg = "#f8fbff" if is_selected else self.colors["panel"]
+        tile = tk.Frame(parent, bg=tile_bg, highlightbackground=border_color, highlightthickness=3 if is_selected else 1, bd=0)
         tile.columnconfigure(0, weight=1)
         tile.columnconfigure(1, weight=0)
 
-        tk.Label(tile, text=coin["name"], bg=self.colors["panel"], fg=self.colors["ink"], font=("Segoe UI", 11, "bold")).grid(row=0, column=0, sticky="w", padx=10, pady=(8, 0))
+        tk.Label(tile, text=coin["name"], bg=tile_bg, fg=self.colors["ink"], font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
         badge = tk.Label(tile, text=signal["label"], bg=border_color, fg="#ffffff", font=("Segoe UI", 8, "bold"), padx=8, pady=2)
-        badge.grid(row=0, column=1, sticky="e", padx=10, pady=(8, 0))
+        badge.grid(row=0, column=1, sticky="e", padx=12, pady=(10, 0))
         move_color = self.colors["green"] if change >= 0 else self.colors["red"]
-        tk.Label(tile, text=f"GBP {coin['price']:,.5f}", bg=self.colors["panel"], fg=self.colors["ink"], font=("Segoe UI", 10)).grid(row=1, column=0, sticky="w", padx=10, pady=(4, 0))
-        tk.Label(tile, text=f"{change:+.2f}%", bg=self.colors["panel"], fg=move_color, font=("Segoe UI", 10, "bold")).grid(row=1, column=1, sticky="e", padx=10, pady=(4, 0))
-        tk.Label(tile, text=f"Owned {self.format_amount(coin['inventory'])}", bg=self.colors["panel"], fg=self.colors["muted"], font=("Segoe UI", 9)).grid(row=2, column=0, sticky="w", padx=10, pady=(6, 8))
+        tk.Label(tile, text=f"GBP {coin['price']:,.5f}", bg=tile_bg, fg=self.colors["ink"], font=("Segoe UI", 13, "bold")).grid(row=1, column=0, sticky="w", padx=12, pady=(5, 0))
+        tk.Label(tile, text=f"{change:+.2f}%", bg=tile_bg, fg=move_color, font=("Segoe UI", 11, "bold")).grid(row=1, column=1, sticky="e", padx=12, pady=(5, 0))
+        tk.Label(tile, text=f"Owned {self.format_amount(coin['inventory'])}", bg=tile_bg, fg=self.colors["muted"], font=("Segoe UI", 9)).grid(row=2, column=0, sticky="w", padx=12, pady=(8, 10))
         pl_color = self.colors["green"] if pl >= 0 else self.colors["red"]
-        tk.Label(tile, text=f"P/L GBP {pl:,.2f}", bg=self.colors["panel"], fg=pl_color, font=("Segoe UI", 9, "bold")).grid(row=2, column=1, sticky="e", padx=10, pady=(6, 8))
+        tk.Label(tile, text=f"P/L GBP {pl:,.2f}", bg=tile_bg, fg=pl_color, font=("Segoe UI", 9, "bold")).grid(row=2, column=1, sticky="e", padx=12, pady=(8, 10))
 
         for child in tile.winfo_children():
             child.bind("<Button-1>", lambda _event, name=coin["name"]: self.select_coin(name))
@@ -604,40 +606,78 @@ class CryptoTraderApp:
     def get_signal_color(self, label):
         colors = {
             "Good Buy": self.colors["green"],
-            "Wait": self.colors["amber"],
+            "Dip Buy": self.colors["accent"],
+            "Momentum Chase": "#f97316",
+            "Wait": self.colors["muted"],
             "Risky": "#f97316",
             "Bad Buy": self.colors["red"],
+            "Take Profit": self.colors["purple"],
+            "Falling Knife": self.colors["red"],
         }
         return colors.get(label, self.colors["muted"])
 
     def get_coin_signal_rating(self, coin):
         change = self.get_change_percent(coin)
         rumour_volatility, rumour_sentiment = self.get_coin_signal(coin)
-        momentum_score = coin["momentum"] * 220
-        sentiment_score = (coin["sentiment"] + rumour_sentiment) * 260
-        move_score = max(-18, min(18, change * 1.8))
-        volatility_penalty = (coin["volatility"] + rumour_volatility) * 90
-        trend_heat_penalty = max(0, (coin["price"] / coin["initial_price"] - 1.45) * 28)
-        crash_value_bonus = max(0, (0.82 - coin["price"] / coin["initial_price"]) * 18)
-        score = 50 + momentum_score + sentiment_score + move_score + crash_value_bonus - volatility_penalty - trend_heat_penalty
+        sentiment = coin["sentiment"] + rumour_sentiment
+        momentum = coin["momentum"]
+        volatility = coin["volatility"] + rumour_volatility
+
+        score = 50
+        score += sentiment * 220
+
+        if 0 < change <= 4:
+            score += change * 2.0
+        elif 4 < change <= 9:
+            score -= (change - 4) * 2.5
+        elif change > 9:
+            score -= 18
+
+        if -8 <= change < -1:
+            if sentiment >= -0.02:
+                score += abs(change) * 2.2
+            else:
+                score -= abs(change) * 1.5
+
+        if change < -8 and sentiment < 0:
+            score -= 22
+
+        score += momentum * 90
+        score -= max(0, volatility - 0.12) * 60
         score = max(0, min(100, int(round(score))))
 
-        if score >= 68:
+        if change > 12:
+            label = "Take Profit"
+            helper = "move may be overextended"
+            explanation = "This coin has already pumped hard today. Buying now risks chasing the top."
+        elif change > 8:
+            label = "Momentum Chase"
+            helper = "hype is strong but hot"
+            explanation = "The move still has energy, but a sharp green candle can snap back quickly."
+        elif change < -10 and sentiment < -0.02:
+            label = "Falling Knife"
+            helper = "bad news is still in control"
+            explanation = "The dip is sharp, but sentiment is weak. Waiting for stabilisation is safer."
+        elif score >= 68:
             label = "Good Buy"
-            helper = "momentum and mood are lining up"
-            explanation = "Positive pressure is stronger than the risk penalty, so this coin has a cleaner setup today."
-        elif score >= 46:
+            helper = "short-term setup looks favourable"
+            explanation = "Price, sentiment, and risk are lining up for a possible quick trade."
+        elif score >= 55 and change < 0:
+            label = "Dip Buy"
+            helper = "possible rebound setup"
+            explanation = "The coin has pulled back without a major negative signal, so a bounce is possible."
+        elif score >= 50:
             label = "Wait"
-            helper = "setup is mixed"
-            explanation = "The signal is balanced. Watch the next headline or price move before adding more exposure."
-        elif score >= 28:
+            helper = "no clean edge yet"
+            explanation = "The setup is not bad, but the trade needs stronger news or a cleaner price."
+        elif score >= 34:
             label = "Risky"
-            helper = "volatility is elevated"
-            explanation = "There may be upside, but volatility, heat, or weak sentiment makes the trade harder to time."
+            helper = "trade is hard to time"
+            explanation = "There may be opportunity, but the risk/reward is messy."
         else:
             label = "Bad Buy"
-            helper = "pressure is negative"
-            explanation = "Momentum and sentiment are working against this coin, so buying now has a poor risk profile."
+            helper = "poor short-term setup"
+            explanation = "The short-term odds are not attractive right now."
 
         if rumour_volatility or rumour_sentiment:
             explanation += " Active rumours are also adding uncertainty."
@@ -833,12 +873,11 @@ class CryptoTraderApp:
         gross_revenue = execution_price * amount
         fee = gross_revenue * self.transaction_fee_rate
         revenue = gross_revenue - fee
-        cost_basis = coin["average_cost"] * amount
+        cost_basis = self.consume_wallet_lots(coin["name"], amount)
         trade_profit = revenue - cost_basis
         self.total_trades += 1
         self.best_trade = max(self.best_trade, trade_profit)
         self.worst_trade = min(self.worst_trade, trade_profit)
-        self.consume_wallet_lots(coin["name"], amount)
         self.sync_coin_from_lots(coin)
         self.cash += revenue
         self.log_trade("SELL", coin, amount, execution_price, revenue, trade_profit)
@@ -1206,14 +1245,17 @@ class CryptoTraderApp:
 
     def consume_wallet_lots(self, coin_name, amount):
         amount_left = amount
+        consumed_cost = 0.0
         for lot in self.wallet_lots:
             if lot["coin"] != coin_name or lot["amount_remaining"] <= 0:
                 continue
             taken = min(lot["amount_remaining"], amount_left)
             lot["amount_remaining"] -= taken
             amount_left -= taken
+            consumed_cost += taken * lot["buy_price"]
             if amount_left <= 0.000001:
                 break
+        return consumed_cost
 
     def log_trade(self, action, coin, amount, price, value, profit):
         self.trade_history.append({
