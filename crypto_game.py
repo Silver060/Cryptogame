@@ -36,6 +36,7 @@ class CryptoTraderApp:
         self.max_days = 30
         self.day = 1
         self.cash = 1000.0
+        self.starting_cash = 1000.0
         self.wallet_capacity = 500.0
         self.game_over = False
         self.total_trades = 0
@@ -48,6 +49,7 @@ class CryptoTraderApp:
         self.sort_reverse = True
         self.wallet_lots = []
         self.next_lot_id = 1
+        self.trade_history = deque(maxlen=80)
 
         self.coins = [
             self.make_coin("Bitcoin", 20000.0, 0.07),
@@ -159,9 +161,9 @@ class CryptoTraderApp:
         self.difficulty_var = tk.StringVar(value="Easy")
         ttk.Label(setup, text="Difficulty", style="CardLabel.TLabel").pack(anchor="w", pady=(18, 0))
         difficulties = [
-            ("Easy", "Easy - GBP 20,000 cash, 10,000 bag space"),
-            ("Medium", "Medium - GBP 10,000 cash, 5,000 bag space"),
-            ("Hard", "Hard - GBP 1,000 cash, 1,000 bag space"),
+            ("Easy", "Easy - GBP 20,000 cash, GBP 30,000 risk limit"),
+            ("Medium", "Medium - GBP 10,000 cash, GBP 15,000 risk limit"),
+            ("Hard", "Hard - GBP 1,000 cash, GBP 2,500 risk limit"),
         ]
         for val, text in difficulties:
             ttk.Radiobutton(setup, text=text, variable=self.difficulty_var, value=val).pack(anchor="w", pady=3)
@@ -183,7 +185,12 @@ class CryptoTraderApp:
             self.start_scores.insert("end", "No scores yet. Be the first whale.")
             return
         for i, score in enumerate(scores[:6], start=1):
-            self.start_scores.insert("end", f"{i}. {score['name']} - GBP {score['net_worth']:,.2f}")
+            return_percent = score.get("return_percent")
+            difficulty = score.get("difficulty", "Legacy")
+            if return_percent is None:
+                self.start_scores.insert("end", f"{i}. {score['name']} - GBP {score['net_worth']:,.2f}")
+            else:
+                self.start_scores.insert("end", f"{i}. {score['name']} - {return_percent:+.1f}% ({difficulty})")
 
     def start_game(self):
         self.max_days = self.game_length_var.get()
@@ -191,6 +198,7 @@ class CryptoTraderApp:
         self.game_over = False
         self.event_feed.clear()
         self.wallet_lots.clear()
+        self.trade_history.clear()
         self.next_lot_id = 1
         self.total_trades = 0
         self.best_trade = 0.0
@@ -199,13 +207,16 @@ class CryptoTraderApp:
         difficulty = self.difficulty_var.get()
         if difficulty == "Easy":
             self.cash = 20000.0
-            self.wallet_capacity = 10000.0
+            self.starting_cash = 20000.0
+            self.wallet_capacity = 30000.0
         elif difficulty == "Medium":
             self.cash = 10000.0
-            self.wallet_capacity = 5000.0
+            self.starting_cash = 10000.0
+            self.wallet_capacity = 15000.0
         else:
             self.cash = 1000.0
-            self.wallet_capacity = 1000.0
+            self.starting_cash = 1000.0
+            self.wallet_capacity = 2500.0
 
         for coin in self.coins:
             coin["price"] = coin["initial_price"]
@@ -386,6 +397,12 @@ class CryptoTraderApp:
         self.feed_list = tk.Listbox(feed_panel, height=7, relief="flat", bd=0, highlightthickness=0, bg=self.colors["panel"], fg=self.colors["ink"], font=("Segoe UI", 9))
         self.feed_list.pack(fill="x", pady=(10, 0))
 
+        history_panel = ttk.Frame(side, style="Panel.TFrame", padding=16)
+        history_panel.grid(row=3, column=0, sticky="ew", pady=(14, 0))
+        ttk.Label(history_panel, text="Trade history", style="PanelTitle.TLabel").pack(anchor="w")
+        self.history_list = tk.Listbox(history_panel, height=5, relief="flat", bd=0, highlightthickness=0, bg=self.colors["panel"], fg=self.colors["ink"], font=("Segoe UI", 8))
+        self.history_list.pack(fill="x", pady=(10, 0))
+
     def build_summary_card(self, column, label, key):
         card = ttk.Frame(self.summary_frame, style="Panel.TFrame", padding=(10, 4))
         card.grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else 8, 0))
@@ -406,12 +423,13 @@ class CryptoTraderApp:
         self.update_trade_panel()
         self.update_chart()
         self.update_feed()
+        self.update_trade_history()
 
     def update_summary(self):
         holdings = self.get_holdings_value()
         net_worth = self.cash + holdings
         total_held = self.get_total_held()
-        capacity_text = f"{total_held:,.0f}/{self.wallet_capacity:,.0f}"
+        capacity_text = f"GBP {holdings:,.0f}/{self.wallet_capacity:,.0f}"
         rank = self.get_rank_name(net_worth)
         self.hero_net_worth.config(text=f"GBP {net_worth:,.2f}")
         self.hero_today.config(text=f"Today: {self.get_daily_net_change_text()}")
@@ -447,7 +465,7 @@ class CryptoTraderApp:
                 values=(
                     f"GBP {coin['price']:,.5f}",
                     f"{change:+.2f}%",
-                    f"{coin['inventory']:,.2f}",
+                    self.format_amount(coin["inventory"]),
                     f"GBP {value:,.2f}",
                     f"GBP {pl:,.2f}",
                 ),
@@ -496,7 +514,7 @@ class CryptoTraderApp:
         change = self.get_change_percent(coin)
         self.selected_title.config(text=coin["name"])
         self.selected_meta.config(
-            text=f"Price GBP {coin['price']:,.5f} | Move {change:+.2f}% | Owned {coin['inventory']:,.2f}"
+            text=f"Price GBP {coin['price']:,.5f} | Move {change:+.2f}% | Owned {self.format_amount(coin['inventory'])}"
         )
         self.selected_mood.config(text=f"Momentum {coin['momentum'] * 100:+.2f}% | Sentiment {coin['sentiment'] * 100:+.2f}%")
         self.draw_coin_badge(coin)
@@ -563,6 +581,22 @@ class CryptoTraderApp:
         for event in reversed(self.event_feed):
             self.feed_list.insert("end", event)
 
+    def update_trade_history(self):
+        if not hasattr(self, "history_list"):
+            return
+        self.history_list.delete(0, "end")
+        if not self.trade_history:
+            self.history_list.insert("end", "No trades yet.")
+            return
+        for trade in reversed(self.trade_history):
+            pnl = ""
+            if trade["action"] == "SELL":
+                pnl = f" | P/L GBP {trade['profit']:,.2f}"
+            self.history_list.insert(
+                "end",
+                f"Day {trade['day']} | {trade['action']} | {trade['coin']} | {self.format_amount(trade['amount'])} @ GBP {trade['price']:,.5f}{pnl}",
+            )
+
     def add_event(self, text):
         self.event_feed.append(f"Day {min(self.day, self.max_days)}: {text}")
         if hasattr(self, "feed_list"):
@@ -613,19 +647,15 @@ class CryptoTraderApp:
             return
         coin = self.coins[index]
         cost = coin["price"] * amount
-        total_held = self.get_total_held()
+        new_value = self.get_holdings_value() + cost
 
         if cost > self.cash:
             self.show_notice("Not enough cash for that buy.")
             return
-        if total_held + amount > self.wallet_capacity:
-            self.show_notice("Your bag is full. Sell something first.")
+        if new_value > self.wallet_capacity:
+            self.show_notice("That buy exceeds your portfolio risk limit.")
             return
 
-        old_shares = coin["inventory"]
-        new_shares = old_shares + amount
-        coin["average_cost"] = (coin["average_cost"] * old_shares + coin["price"] * amount) / new_shares
-        coin["inventory"] = new_shares
         self.cash -= cost
         self.wallet_lots.append({
             "id": self.next_lot_id,
@@ -637,7 +667,9 @@ class CryptoTraderApp:
             "cost": cost,
         })
         self.next_lot_id += 1
-        self.add_event(f"Bought {amount:,.2f} {coin['name']} for GBP {cost:,.2f}.")
+        self.sync_coin_from_lots(coin)
+        self.log_trade("BUY", coin, amount, coin["price"], cost, 0.0)
+        self.add_event(f"Bought {self.format_amount(amount)} {coin['name']} for GBP {cost:,.2f}.")
         self.update_dashboard()
 
     def sell_coin(self, index, amount):
@@ -655,21 +687,20 @@ class CryptoTraderApp:
         self.best_trade = max(self.best_trade, trade_profit)
         self.worst_trade = min(self.worst_trade, trade_profit)
         self.consume_wallet_lots(coin["name"], amount)
-        coin["inventory"] -= amount
-        if coin["inventory"] <= 0:
-            coin["inventory"] = 0.0
-            coin["average_cost"] = 0.0
+        self.sync_coin_from_lots(coin)
         self.cash += revenue
+        self.log_trade("SELL", coin, amount, coin["price"], revenue, trade_profit)
         result = "profit" if trade_profit >= 0 else "loss"
-        self.add_event(f"Sold {amount:,.2f} {coin['name']} for GBP {revenue:,.2f} ({result} GBP {trade_profit:,.2f}).")
+        self.add_event(f"Sold {self.format_amount(amount)} {coin['name']} for GBP {revenue:,.2f} ({result} GBP {trade_profit:,.2f}).")
         self.update_dashboard()
 
     def buy_max(self, index):
         if self.game_over:
             return
         coin = self.coins[index]
-        capacity_left = self.wallet_capacity - self.get_total_held()
-        amount_to_buy = min(self.cash // coin["price"], capacity_left)
+        value_capacity_left = max(0.0, self.wallet_capacity - self.get_holdings_value())
+        amount_to_buy = min(self.cash / coin["price"], value_capacity_left / coin["price"])
+        amount_to_buy = round(amount_to_buy, 8)
         if amount_to_buy <= 0:
             self.show_notice("Cannot buy any more of this coin.")
             return
@@ -863,6 +894,17 @@ class CryptoTraderApp:
     def get_total_held(self):
         return sum(coin["inventory"] for coin in self.coins)
 
+    def sync_coin_from_lots(self, coin):
+        lots = [lot for lot in self.get_open_lots() if lot["coin"] == coin["name"]]
+        inventory = sum(lot["amount_remaining"] for lot in lots)
+        total_cost = sum(lot["amount_remaining"] * lot["buy_price"] for lot in lots)
+        coin["inventory"] = inventory
+        coin["average_cost"] = total_cost / inventory if inventory else 0.0
+
+    def sync_all_coins_from_lots(self):
+        for coin in self.coins:
+            self.sync_coin_from_lots(coin)
+
     def get_open_lots(self):
         return [lot for lot in self.wallet_lots if lot["amount_remaining"] > 0.000001]
 
@@ -906,6 +948,17 @@ class CryptoTraderApp:
             if amount_left <= 0.000001:
                 break
 
+    def log_trade(self, action, coin, amount, price, value, profit):
+        self.trade_history.append({
+            "day": min(self.day, self.max_days),
+            "action": action,
+            "coin": coin["name"],
+            "amount": amount,
+            "price": price,
+            "value": value,
+            "profit": profit,
+        })
+
     def get_rank_name(self, net_worth):
         if net_worth >= 50000:
             return "Whale"
@@ -921,10 +974,25 @@ class CryptoTraderApp:
         self.add_event(text)
         self.update_feed()
 
+    def format_amount(self, amount):
+        if abs(amount) >= 100:
+            return f"{amount:,.2f}"
+        if abs(amount) >= 1:
+            return f"{amount:,.4f}".rstrip("0").rstrip(".")
+        return f"{amount:,.8f}".rstrip("0").rstrip(".")
+
     # ======================
     #  High Score Logic
     # ======================
     def get_data_path(self, filename):
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            base_dir = os.path.join(appdata, "Crypto Trader")
+            try:
+                os.makedirs(base_dir, exist_ok=True)
+                return os.path.join(base_dir, filename)
+            except OSError:
+                pass
         if getattr(sys, "frozen", False):
             base_dir = os.path.dirname(sys.executable)
         else:
@@ -945,13 +1013,18 @@ class CryptoTraderApp:
 
     def save_high_score(self, name, net_worth, best_trade, worst_trade):
         scores = self.load_high_scores()
+        return_percent = ((net_worth - self.starting_cash) / self.starting_cash) * 100
         scores.append({
             "name": name,
             "net_worth": net_worth,
             "best_trade": best_trade,
             "worst_trade": worst_trade,
+            "difficulty": self.difficulty_var.get(),
+            "days": self.max_days,
+            "starting_cash": self.starting_cash,
+            "return_percent": return_percent,
         })
-        scores.sort(key=lambda s: s["net_worth"], reverse=True)
+        scores.sort(key=lambda s: s.get("return_percent", -999999), reverse=True)
         scores = scores[:10]
         with open(self.high_score_file, "w", encoding="utf-8") as f:
             json.dump(scores, f, indent=2)
@@ -970,15 +1043,15 @@ class CryptoTraderApp:
             ttk.Label(panel, text="No high scores yet.", style="Body.TLabel").pack(anchor="w", pady=18)
             return
 
-        table = ttk.Treeview(panel, columns=("net", "best", "worst"), show="tree headings", height=10)
+        table = ttk.Treeview(panel, columns=("return", "mode", "net"), show="tree headings", height=10)
         table.heading("#0", text="Player")
+        table.heading("return", text="Return")
+        table.heading("mode", text="Mode")
         table.heading("net", text="Net worth")
-        table.heading("best", text="Best")
-        table.heading("worst", text="Worst")
-        table.column("#0", width=150, anchor="w")
-        table.column("net", width=120, anchor="e")
-        table.column("best", width=100, anchor="e")
-        table.column("worst", width=100, anchor="e")
+        table.column("#0", width=140, anchor="w")
+        table.column("return", width=90, anchor="e")
+        table.column("mode", width=120, anchor="center")
+        table.column("net", width=130, anchor="e")
         table.pack(fill="both", expand=True, pady=(12, 0))
         for index, entry in enumerate(scores, start=1):
             table.insert(
@@ -986,9 +1059,9 @@ class CryptoTraderApp:
                 "end",
                 text=f"{index}. {entry['name']}",
                 values=(
+                    f"{entry.get('return_percent', 0):+.1f}%" if "return_percent" in entry else "Legacy",
+                    f"{entry.get('difficulty', 'Legacy')} / {entry.get('days', '-')}",
                     f"GBP {entry['net_worth']:,.2f}",
-                    f"GBP {entry['best_trade']:,.2f}",
-                    f"GBP {entry['worst_trade']:,.2f}",
                 ),
             )
 

@@ -1,5 +1,7 @@
 __pycache__/
 build/
+dist/
 *.spec
+*.exe
 high_scores.json
 *.pyc
