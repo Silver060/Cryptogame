@@ -5,9 +5,10 @@ An offline desktop crypto trading game built with Python and Tkinter.
 ## Features
 
 - Arcade-style trading dashboard
-- Clickable market coin tiles with price, daily move, holdings, live P/L, and trading signal badges
-- Right-side coin detail panel with a larger trend chart, trade controls, confidence, and signal explanation
-- Short-term signals such as Good Buy, Dip Buy, Momentum Chase, Take Profit, Wait, Risky, Bad Buy, and Falling Knife
+- Clickable market coin tiles with price, daily move, holdings, live P/L, and difficulty-aware trading signal badges
+- Large selected-coin decision panel with a prominent trend chart, trade controls, news, momentum, sentiment, and difficulty-aware helper
+- Short-term signals such as Strong Buy, Dip Buy, Good Buy, Wait, Risky Chase, Take Profit, Falling Knife, and Bad Buy
+- Easy guided broker helper, Medium compact helper, and Hard raw-market mode with signals hidden
 - Horizontal market news ticker with generated daily headlines
 - Structured market news events with target, price impact, sentiment impact, ticker text, and explanations
 - Compact position tiles with combined buys, weighted average buy price, held days, live P/L, and quick sell buttons
@@ -65,7 +66,7 @@ python crypto_game.py
 Install PyInstaller, then run:
 
 ```powershell
-pyinstaller --onefile --windowed --name crypto_game_v1.4 crypto_game.py
+pyinstaller --onefile --windowed --name crypto_game_v1.5 crypto_game.py
 ```
 
 Packaged builds should be uploaded through GitHub Releases rather than committed
@@ -78,6 +79,7 @@ crypto_game_v1.1.exe
 crypto_game_v1.2.exe
 crypto_game_v1.3.exe
 crypto_game_v1.4.exe
+crypto_game_v1.5.exe
 ```
 
 Use the next minor version for normal feature/fix builds, and reserve bigger

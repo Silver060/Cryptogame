@@ -288,9 +288,10 @@ class CryptoTraderApp:
         content = ttk.Frame(self.game_frame, style="App.TFrame", padding=16)
         content.grid(row=0, column=1, sticky="nsew")
         content.columnconfigure(0, weight=1, minsize=650)
-        content.columnconfigure(1, weight=0, minsize=330)
+        content.columnconfigure(1, weight=1, minsize=330)
         content.rowconfigure(3, weight=1)
-        content.rowconfigure(4, weight=0)
+        content.rowconfigure(4, weight=1)
+        content.rowconfigure(5, weight=0)
 
         top = ttk.Frame(content, style="Panel.TFrame", padding=18)
         top.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 14))
@@ -331,8 +332,69 @@ class CryptoTraderApp:
         self.build_summary_card(4, "Mood", "mood")
         self.build_summary_card(5, "Rank", "rank")
 
+        self.selected_panel = ttk.Frame(content, style="Panel.TFrame", padding=16)
+        self.selected_panel.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(0, 12))
+        self.selected_panel.columnconfigure(0, weight=1, minsize=360)
+        self.selected_panel.columnconfigure(1, weight=2, minsize=520)
+        self.selected_panel.rowconfigure(1, weight=1)
+
+        ttk.Label(self.selected_panel, text="Selected coin", style="PanelTitle.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
+        decision = ttk.Frame(self.selected_panel, style="Panel.TFrame")
+        decision.grid(row=1, column=0, sticky="nsew", padx=(0, 16), pady=(12, 0))
+        decision.columnconfigure(0, weight=1)
+        decision.columnconfigure(1, weight=1)
+        coin_card = ttk.Frame(decision, style="Panel.TFrame")
+        coin_card.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        self.coin_badge = tk.Canvas(coin_card, width=58, height=58, bg=self.colors["panel"], bd=0, highlightthickness=0)
+        self.coin_badge.pack(side="left", padx=(0, 12))
+        text_stack = ttk.Frame(coin_card, style="Panel.TFrame")
+        text_stack.pack(side="left", fill="x", expand=True)
+        self.selected_title = ttk.Label(text_stack, text="Bitcoin", style="CardValue.TLabel")
+        self.selected_title.pack(anchor="w")
+        self.selected_meta = ttk.Label(text_stack, text="", style="Body.TLabel")
+        self.selected_meta.pack(anchor="w", pady=(2, 0))
+        self.selected_mood = ttk.Label(text_stack, text="", style="Muted.TLabel")
+        self.selected_mood.pack(anchor="w", pady=(2, 0))
+        self.selected_news = ttk.Label(decision, text="", style="Muted.TLabel", wraplength=380)
+        self.selected_news.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        self.signal_helper = ttk.Label(decision, text="", style="PanelTitle.TLabel", wraplength=380)
+        self.signal_helper.grid(row=2, column=0, columnspan=2, sticky="w", pady=(0, 3))
+        self.signal_confidence = ttk.Label(decision, text="", style="Muted.TLabel")
+        self.signal_confidence.grid(row=3, column=0, columnspan=2, sticky="w")
+        self.signal_action = ttk.Label(decision, text="", style="Muted.TLabel")
+        self.signal_action.grid(row=4, column=0, columnspan=2, sticky="w")
+        self.signal_risk = ttk.Label(decision, text="", style="Muted.TLabel")
+        self.signal_risk.grid(row=5, column=0, columnspan=2, sticky="w")
+        self.signal_explanation = ttk.Label(decision, text="", style="Muted.TLabel", wraplength=380)
+        self.signal_explanation.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        ttk.Label(
+            decision,
+            text="Costs: 0.5% fee plus 0.25% spread on each trade",
+            style="Muted.TLabel",
+        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        ttk.Label(decision, text="Amount", style="CardLabel.TLabel").grid(row=8, column=0, sticky="w", pady=(0, 4))
+        self.trade_amount = tk.StringVar(value="1")
+        ttk.Entry(decision, textvariable=self.trade_amount, width=12).grid(row=9, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        quick = ttk.Frame(decision, style="Panel.TFrame")
+        quick.grid(row=10, column=0, columnspan=2, sticky="ew")
+        for col, amount in enumerate((1, 10, 100, 1000)):
+            quick.columnconfigure(col, weight=1)
+            ttk.Button(quick, text=str(amount), style="Soft.TButton", command=lambda value=amount: self.set_trade_amount(value)).grid(row=0, column=col, sticky="ew", padx=(0 if col == 0 else 5, 0))
+        ttk.Button(decision, text="BUY", style="Buy.TButton", command=self.buy_selected).grid(row=11, column=0, sticky="ew", pady=(12, 0), padx=(0, 5))
+        ttk.Button(decision, text="SELL", style="Soft.TButton", command=self.sell_selected).grid(row=11, column=1, sticky="ew", pady=(12, 0))
+        ttk.Button(decision, text="Buy max", style="Soft.TButton", command=self.buy_selected_max).grid(row=12, column=0, sticky="ew", pady=(8, 0), padx=(0, 5))
+        ttk.Button(decision, text="Sell all", style="Soft.TButton", command=self.sell_selected_max).grid(row=12, column=1, sticky="ew", pady=(8, 0))
+
+        chart_panel = ttk.Frame(self.selected_panel, style="Panel.TFrame")
+        chart_panel.grid(row=1, column=1, sticky="nsew", pady=(12, 0))
+        chart_panel.rowconfigure(1, weight=1)
+        chart_panel.columnconfigure(0, weight=1)
+        ttk.Label(chart_panel, text="Trend line", style="PanelTitle.TLabel").grid(row=0, column=0, sticky="w")
+        self.chart_canvas = tk.Canvas(chart_panel, height=255, bg=self.colors["panel"], bd=0, highlightthickness=0)
+        self.chart_canvas.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+
         market_panel = ttk.Frame(content, style="Panel.TFrame", padding=14)
-        market_panel.grid(row=3, column=0, sticky="nsew", padx=(0, 14), pady=(0, 12))
+        market_panel.grid(row=4, column=0, columnspan=2, sticky="nsew", pady=(0, 12))
 
         market_panel.rowconfigure(1, weight=1)
         market_panel.columnconfigure(0, weight=1)
@@ -347,7 +409,7 @@ class CryptoTraderApp:
             self.market_tiles_frame.columnconfigure(col, weight=1)
 
         wallet_panel = ttk.Frame(content, style="Panel.TFrame", padding=12)
-        wallet_panel.grid(row=4, column=0, columnspan=2, sticky="ew")
+        wallet_panel.grid(row=5, column=0, sticky="ew", padx=(0, 8))
         wallet_panel.columnconfigure(0, weight=1)
         wallet_header = ttk.Frame(wallet_panel, style="Panel.TFrame")
         wallet_header.grid(row=0, column=0, sticky="ew", pady=(0, 8))
@@ -360,58 +422,10 @@ class CryptoTraderApp:
         for col in range(4):
             self.position_tiles_frame.columnconfigure(col, weight=1)
 
-        side = ttk.Frame(content, style="App.TFrame")
-        side.grid(row=3, column=1, rowspan=1, sticky="nsew")
-        side.rowconfigure(1, weight=1)
-        self.trade_panel = ttk.Frame(side, style="Panel.TFrame", padding=16)
-        self.trade_panel.grid(row=0, column=0, sticky="ew", pady=(0, 14))
-        self.trade_panel.columnconfigure(0, weight=1)
-        ttk.Label(self.trade_panel, text="Trade ticket", style="PanelTitle.TLabel").grid(row=0, column=0, columnspan=4, sticky="w")
-        coin_card = ttk.Frame(self.trade_panel, style="Panel.TFrame")
-        coin_card.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(10, 12))
-        self.coin_badge = tk.Canvas(coin_card, width=54, height=54, bg=self.colors["panel"], bd=0, highlightthickness=0)
-        self.coin_badge.pack(side="left", padx=(0, 12))
-        text_stack = ttk.Frame(coin_card, style="Panel.TFrame")
-        text_stack.pack(side="left", fill="x", expand=True)
-        self.selected_title = ttk.Label(text_stack, text="Bitcoin", style="CardValue.TLabel")
-        self.selected_title.pack(anchor="w")
-        self.selected_meta = ttk.Label(text_stack, text="", style="Muted.TLabel")
-        self.selected_meta.pack(anchor="w", pady=(2, 0))
-        self.selected_mood = ttk.Label(text_stack, text="", style="Muted.TLabel")
-        self.selected_mood.pack(anchor="w", pady=(2, 0))
-        self.signal_helper = ttk.Label(self.trade_panel, text="", style="PanelTitle.TLabel")
-        self.signal_helper.grid(row=2, column=0, columnspan=4, sticky="w", pady=(0, 2))
-        self.signal_confidence = ttk.Label(self.trade_panel, text="", style="Muted.TLabel")
-        self.signal_confidence.grid(row=3, column=0, columnspan=4, sticky="w")
-        self.signal_explanation = ttk.Label(self.trade_panel, text="", style="Muted.TLabel", wraplength=290)
-        self.signal_explanation.grid(row=4, column=0, columnspan=4, sticky="w", pady=(0, 10))
-        ttk.Label(
-            self.trade_panel,
-            text="Costs: 0.5% fee plus 0.25% spread on each trade",
-            style="Muted.TLabel",
-        ).grid(row=5, column=0, columnspan=4, sticky="w", pady=(0, 10))
-        ttk.Label(self.trade_panel, text="Amount", style="CardLabel.TLabel").grid(row=6, column=0, sticky="w", pady=(0, 4))
-        self.trade_amount = tk.StringVar(value="1")
-        ttk.Entry(self.trade_panel, textvariable=self.trade_amount, width=12).grid(row=7, column=0, columnspan=4, sticky="ew", pady=(0, 10))
-        for col, amount in enumerate((1, 10, 100, 1000)):
-            ttk.Button(self.trade_panel, text=str(amount), style="Soft.TButton", command=lambda value=amount: self.set_trade_amount(value)).grid(row=8, column=col, sticky="ew", padx=(0 if col == 0 else 5, 0))
-        ttk.Button(self.trade_panel, text="BUY", style="Buy.TButton", command=self.buy_selected).grid(row=9, column=0, columnspan=2, sticky="ew", pady=(12, 0), padx=(0, 5))
-        ttk.Button(self.trade_panel, text="SELL", style="Soft.TButton", command=self.sell_selected).grid(row=9, column=2, columnspan=2, sticky="ew", pady=(12, 0))
-        ttk.Button(self.trade_panel, text="Buy max", style="Soft.TButton", command=self.buy_selected_max).grid(row=10, column=0, columnspan=2, sticky="ew", pady=(8, 0), padx=(0, 5))
-        ttk.Button(self.trade_panel, text="Sell all", style="Soft.TButton", command=self.sell_selected_max).grid(row=10, column=2, columnspan=2, sticky="ew", pady=(8, 0))
-
-        chart_panel = ttk.Frame(side, style="Panel.TFrame", padding=16)
-        chart_panel.grid(row=1, column=0, sticky="nsew", pady=(0, 14))
-        chart_panel.rowconfigure(1, weight=1)
-        chart_panel.columnconfigure(0, weight=1)
-        ttk.Label(chart_panel, text="Trend line", style="PanelTitle.TLabel").grid(row=0, column=0, sticky="w")
-        self.chart_canvas = tk.Canvas(chart_panel, height=145, bg=self.colors["panel"], bd=0, highlightthickness=0)
-        self.chart_canvas.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
-
-        history_panel = ttk.Frame(side, style="Panel.TFrame", padding=16)
-        history_panel.grid(row=2, column=0, sticky="ew")
+        history_panel = ttk.Frame(content, style="Panel.TFrame", padding=12)
+        history_panel.grid(row=5, column=1, sticky="nsew", padx=(8, 0))
         ttk.Label(history_panel, text="Trade history", style="PanelTitle.TLabel").pack(anchor="w")
-        self.history_list = tk.Listbox(history_panel, height=8, relief="flat", bd=0, highlightthickness=0, bg=self.colors["panel"], fg=self.colors["ink"], font=("Segoe UI", 8))
+        self.history_list = tk.Listbox(history_panel, height=6, relief="flat", bd=0, highlightthickness=0, bg=self.colors["panel"], fg=self.colors["ink"], font=("Segoe UI", 8))
         self.history_list.pack(fill="x", pady=(10, 0))
 
     def build_summary_card(self, column, label, key):
@@ -500,16 +514,20 @@ class CryptoTraderApp:
         signal = self.get_coin_signal_rating(coin)
         change = self.get_change_percent(coin)
         pl = (coin["price"] - coin["average_cost"]) * coin["inventory"] if coin["inventory"] else 0.0
-        border_color = self.get_signal_color(signal["label"])
         is_selected = coin["name"] == self.selected_coin_name
+        show_signal = self.get_signal_visibility_mode() != "hidden"
+        border_color = self.get_signal_color(signal["label"]) if show_signal else self.colors["line"]
+        if is_selected:
+            border_color = self.colors["accent"] if not show_signal else border_color
         tile_bg = "#f8fbff" if is_selected else self.colors["panel"]
         tile = tk.Frame(parent, bg=tile_bg, highlightbackground=border_color, highlightthickness=3 if is_selected else 1, bd=0)
         tile.columnconfigure(0, weight=1)
         tile.columnconfigure(1, weight=0)
 
         tk.Label(tile, text=coin["name"], bg=tile_bg, fg=self.colors["ink"], font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
-        badge = tk.Label(tile, text=signal["label"], bg=border_color, fg="#ffffff", font=("Segoe UI", 8, "bold"), padx=8, pady=2)
-        badge.grid(row=0, column=1, sticky="e", padx=12, pady=(10, 0))
+        if show_signal:
+            badge = tk.Label(tile, text=signal["label"], bg=border_color, fg="#ffffff", font=("Segoe UI", 8, "bold"), padx=8, pady=2)
+            badge.grid(row=0, column=1, sticky="e", padx=12, pady=(10, 0))
         move_color = self.colors["green"] if change >= 0 else self.colors["red"]
         tk.Label(tile, text=f"GBP {coin['price']:,.5f}", bg=tile_bg, fg=self.colors["ink"], font=("Segoe UI", 13, "bold")).grid(row=1, column=0, sticky="w", padx=12, pady=(5, 0))
         tk.Label(tile, text=f"{change:+.2f}%", bg=tile_bg, fg=move_color, font=("Segoe UI", 11, "bold")).grid(row=1, column=1, sticky="e", padx=12, pady=(5, 0))
@@ -569,6 +587,8 @@ class CryptoTraderApp:
         coin = self.get_selected_coin()
         change = self.get_change_percent(coin)
         signal = self.get_coin_signal_rating(coin)
+        relevant_news = self.get_latest_relevant_news(coin)
+        mode = self.get_signal_visibility_mode()
         self.selected_title.config(text=coin["name"])
         self.selected_meta.config(
             text=f"Price GBP {coin['price']:,.5f} | Move {change:+.2f}% | Owned {self.format_amount(coin['inventory'])}"
@@ -576,9 +596,8 @@ class CryptoTraderApp:
         self.selected_mood.config(
             text=f"{coin['sector']} | Momentum {coin['momentum'] * 100:+.2f}% | Sentiment {coin['sentiment'] * 100:+.2f}%"
         )
-        self.signal_helper.config(text=f"{signal['label']} - {signal['helper']}")
-        self.signal_confidence.config(text=f"Confidence: {signal['confidence']}%")
-        self.signal_explanation.config(text=signal["explanation"])
+        self.selected_news.config(text=f"Latest relevant news: {relevant_news['ticker']}")
+        self.update_signal_helper_display(signal, mode)
         self.draw_coin_badge(coin)
 
     def draw_coin_badge(self, coin):
@@ -605,26 +624,103 @@ class CryptoTraderApp:
 
     def get_signal_color(self, label):
         colors = {
+            "Strong Buy": self.colors["green"],
             "Good Buy": self.colors["green"],
             "Dip Buy": self.colors["accent"],
-            "Momentum Chase": "#f97316",
             "Wait": self.colors["muted"],
-            "Risky": "#f97316",
-            "Bad Buy": self.colors["red"],
+            "Risky Chase": "#f97316",
             "Take Profit": self.colors["purple"],
             "Falling Knife": self.colors["red"],
+            "Bad Buy": self.colors["red"],
         }
         return colors.get(label, self.colors["muted"])
+
+    def get_signal_visibility_mode(self):
+        difficulty = self.difficulty_var.get()
+        if difficulty == "Hard":
+            return "hidden"
+        if difficulty == "Medium":
+            return "compact"
+        return "guided"
+
+    def update_signal_helper_display(self, signal, mode):
+        signal_widgets = (
+            self.signal_helper,
+            self.signal_confidence,
+            self.signal_action,
+            self.signal_risk,
+            self.signal_explanation,
+        )
+        if mode == "hidden":
+            for widget in signal_widgets:
+                widget.grid_remove()
+            return
+
+        for widget in signal_widgets:
+            widget.grid()
+
+        if mode == "guided":
+            self.signal_helper.config(text=f"Broker helper: {signal['label']}")
+            self.signal_confidence.config(text=f"Confidence: {signal['confidence']}%")
+            self.signal_action.config(text=f"Suggested action: {signal['action']}")
+            self.signal_risk.config(text=f"Risk level: {signal['risk']}")
+            self.signal_explanation.config(text=f"Reason: {signal['explanation']}")
+            return
+
+        self.signal_helper.config(text=f"{signal['label']} - {signal['helper']}")
+        self.signal_confidence.config(text=f"Confidence: {signal['confidence']}%")
+        self.signal_action.grid_remove()
+        self.signal_risk.grid_remove()
+        self.signal_explanation.config(text=signal["short_explanation"])
+
+    def get_latest_relevant_news(self, coin):
+        for news in reversed(self.news_items):
+            if self.news_applies_to_coin(news, coin):
+                return news
+        return {
+            "headline": "No coin-specific news yet",
+            "target": coin["name"],
+            "price_impact": 0.0,
+            "sentiment_impact": 0.0,
+            "ticker": "No relevant headline yet. Watch raw price action.",
+            "explanation": "No meaningful catalyst has appeared for this coin yet.",
+        }
+
+    def news_applies_to_coin(self, news, coin):
+        target = str(news.get("target", "")).lower()
+        if target in ("market", "large-cap coins"):
+            return True
+        return target == coin["name"].lower() or target == coin["sector"].lower()
 
     def get_coin_signal_rating(self, coin):
         change = self.get_change_percent(coin)
         rumour_volatility, rumour_sentiment = self.get_coin_signal(coin)
+        latest_news = self.get_latest_relevant_news(coin)
         sentiment = coin["sentiment"] + rumour_sentiment
         momentum = coin["momentum"]
         volatility = coin["volatility"] + rumour_volatility
+        news_price_impact = latest_news.get("price_impact", 0.0)
+        news_sentiment_impact = latest_news.get("sentiment_impact", 0.0)
+        bad_coin_news = (
+            self.news_applies_to_coin(latest_news, coin)
+            and latest_news.get("target") not in ("Market", "Large-cap coins")
+            and (news_price_impact <= -0.08 or news_sentiment_impact <= -0.04)
+        )
+
+        if abs(change) < 0.05 and abs(sentiment) < 0.01 and abs(momentum) < 0.01 and abs(news_price_impact) < 0.01:
+            return {
+                "label": "Wait",
+                "helper": "no edge yet",
+                "confidence": 50,
+                "action": "Watch",
+                "risk": "Low",
+                "explanation": "Day 1 is neutral. There is no meaningful price movement or catalyst yet, so wait for the market to show its hand.",
+                "short_explanation": "No edge yet. Watch for the first real move or headline.",
+            }
 
         score = 50
         score += sentiment * 220
+        score += news_sentiment_impact * 160
 
         if 0 < change <= 4:
             score += change * 2.0
@@ -641,52 +737,97 @@ class CryptoTraderApp:
 
         if change < -8 and sentiment < 0:
             score -= 22
+        if bad_coin_news:
+            score -= 18
 
         score += momentum * 90
         score -= max(0, volatility - 0.12) * 60
         score = max(0, min(100, int(round(score))))
 
-        if change > 12:
+        strong_follow_through = sentiment >= 0.08 and momentum >= 0.07 and news_sentiment_impact >= 0.04
+        if change > 12 and not strong_follow_through:
             label = "Take Profit"
             helper = "move may be overextended"
+            action = "Protect profit or wait for a pullback"
+            risk = "High"
             explanation = "This coin has already pumped hard today. Buying now risks chasing the top."
-        elif change > 8:
-            label = "Momentum Chase"
+            short_explanation = "Already pumped hard today. Chasing here is dangerous."
+        elif change > 8 and not strong_follow_through:
+            label = "Risky Chase"
             helper = "hype is strong but hot"
+            action = "Only chase with small size"
+            risk = "High"
             explanation = "The move still has energy, but a sharp green candle can snap back quickly."
-        elif change < -10 and sentiment < -0.02:
+            short_explanation = "Strong move, but it is hot and can snap back."
+        elif change < -10 and (sentiment < -0.02 or bad_coin_news):
             label = "Falling Knife"
             helper = "bad news is still in control"
+            action = "Wait for stabilisation"
+            risk = "Very High"
             explanation = "The dip is sharp, but sentiment is weak. Waiting for stabilisation is safer."
+            short_explanation = "Sharp fall with weak sentiment. Let it stabilise first."
+        elif bad_coin_news and score < 45:
+            label = "Bad Buy"
+            helper = "negative catalyst is active"
+            action = "Avoid for now"
+            risk = "High"
+            explanation = "The price weakness is tied to negative coin-specific news, so the odds of a quick rebound are poor."
+            short_explanation = "Negative coin-specific news is still weighing on the trade."
+        elif score >= 76 and change <= 8:
+            label = "Strong Buy"
+            helper = "short-term edge is clean"
+            action = "Buy or add carefully"
+            risk = "Medium"
+            explanation = "Sentiment, momentum, and price action are aligned without looking overextended."
+            short_explanation = "Clean short-term setup without an overextended move."
         elif score >= 68:
             label = "Good Buy"
             helper = "short-term setup looks favourable"
+            action = "Consider buying"
+            risk = "Medium"
             explanation = "Price, sentiment, and risk are lining up for a possible quick trade."
+            short_explanation = "Price, sentiment, and risk are lining up."
         elif score >= 55 and change < 0:
             label = "Dip Buy"
             helper = "possible rebound setup"
+            action = "Buy the dip cautiously"
+            risk = "Medium"
             explanation = "The coin has pulled back without a major negative signal, so a bounce is possible."
+            short_explanation = "Pullback without major negative pressure. Bounce is possible."
         elif score >= 50:
             label = "Wait"
             helper = "no clean edge yet"
+            action = "Watch"
+            risk = "Low"
             explanation = "The setup is not bad, but the trade needs stronger news or a cleaner price."
+            short_explanation = "No clean edge yet."
         elif score >= 34:
-            label = "Risky"
+            label = "Risky Chase" if change > 0 else "Bad Buy"
             helper = "trade is hard to time"
+            action = "Avoid unless you have a plan"
+            risk = "High"
             explanation = "There may be opportunity, but the risk/reward is messy."
+            short_explanation = "Risk/reward is messy."
         else:
             label = "Bad Buy"
             helper = "poor short-term setup"
+            action = "Avoid for now"
+            risk = "High"
             explanation = "The short-term odds are not attractive right now."
+            short_explanation = "Poor short-term setup."
 
         if rumour_volatility or rumour_sentiment:
             explanation += " Active rumours are also adding uncertainty."
+            short_explanation += " Rumours add uncertainty."
 
         return {
             "label": label,
             "helper": helper,
             "confidence": score,
+            "action": action,
+            "risk": risk,
             "explanation": explanation,
+            "short_explanation": short_explanation,
         }
 
     def update_chart(self):
